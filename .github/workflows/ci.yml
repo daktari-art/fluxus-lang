@@ -1,0 +1,41 @@
+# FILENAME: .github/workflows/ci.yml
+# 
+# Continuous Integration Workflow for Fluxus Language.
+# Automates testing on every push and pull request.
+
+name: Fluxus CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allows manual triggering of the workflow from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      # Based on package.json, we target Node.js 18+
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: 🧪 Run Core Test Suite
+      # Executes the 'test' script defined in package.json
+      run: npm test
+      
+    - name: 📦 Build/Compile (If applicable)
+      # Executes a generic build script if it existed, ensures compilation step works
+      # We use 'compile' from package.json with a core example
+      run: npm run compile examples/login.flux
