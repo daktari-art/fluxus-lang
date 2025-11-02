@@ -1,0 +1,48 @@
+{
+  "name": "@fluxus-lang/core",
+  "version": "1.0.0",
+  "description": "Reactive Stream Programming Language - Where Time and Data are Unified in a non-blocking flow.",
+  "main": "src/cli.js",
+  "type": "module",
+  "bin": {
+    "fluxus": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node test-run.js",
+    "dev": "node --watch src/cli.js run examples/counter.flux",
+    "repl": "node src/cli.js repl",
+    "compile": "node src/cli.js compile examples/login.flux",
+    "parse": "node src/cli.js parse examples/arithmetic.flux",
+    "examples": "node src/cli.js run examples/login.flux",
+    "coverage": "node --test test-run.js"
+  },
+  "keywords": [
+    "reactive-programming",
+    "dataflow",
+    "stream-programming",
+    "functional-programming",
+    "fluxus",
+    "asynchronous"
+  ],
+  "author": "Fluxus Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fluxus-lang/fluxus-lang.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "src",
+    "cli.js",
+    "test-run.js"
+  ],
+  "dependencies": {
+    
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  }
+}
