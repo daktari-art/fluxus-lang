@@ -9,7 +9,7 @@ We welcome contributions of all kinds to the Fluxus Language project—from fixi
 1.  **Fork** the `fluxus-lang/fluxus-lang` repository on GitHub.
 2.  **Clone** your fork locally:
     ```bash
-    git clone [https://github.com/your-username/fluxus-lang.git](https://github.com/your-username/fluxus-lang.git)
+    git clone [https://github.com/your-username/fluxus-lang.git](https://github.com/daktari-art/fluxus-lang.git)
     cd fluxus-lang
     ```
 3.  **Install dependencies** (assuming Node.js 18+):
