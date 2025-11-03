@@ -3,6 +3,9 @@
 // Command Line Interface (CLI) Entry Point for Fluxus Language v1.0.0.
 // Handles command routing (run, parse, repl) and interfaces with the core compiler and engine.
 
+// FIX: Change 'require' to 'import' for Node.js built-in modules in an ES Module project.
+import fs from 'fs'; 
+
 import { Compiler } from './core/compiler.js';
 import { RuntimeEngine } from './core/engine.js';
 import { GraphParser } from './core/parser.js';
@@ -22,7 +25,7 @@ const VERSION = '1.0.0';
  */
 function loadSourceFile(path) {
     try {
-        const fs = require('fs');
+        // FIX: The file system module is now available via the top-level import 'fs'.
         return fs.readFileSync(path, 'utf-8');
     } catch (e) {
         console.error(`\n徴 ERROR: Could not find or read file: ${path}`);
@@ -136,12 +139,9 @@ function main() {
 
 // Ensure execution is within the main block scope (Node.js convention)
 try {
-    // Requires module path resolution for external components
-    // If run directly: node src/cli.js...
     main();
 } catch (e) {
     if (e.code!== 'MODULE_NOT_FOUND') {
         console.error(`\n徴 Fatal Runtime Error: ${e.message}`);
     }
-    // Error handling for module requires (like 'fs') if run without proper setup
 }
