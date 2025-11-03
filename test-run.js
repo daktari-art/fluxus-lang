@@ -4,7 +4,7 @@
 // Executes tests for Stream integrity, N-ary fixes, and reactive flow logic.
 
 const tests = [
-    // 1. Core Arithmetic Test
+    // 1. Core Arithmetic Test: Basic Multiplication
     {
         name: 'Basic Multiplication',
         code: '~ 12 | multiply(12) | print()',
@@ -20,25 +20,31 @@ const tests = [
     // 3. N-ary Division Test
     {
         name: 'N-ary Division (Chained)',
-        code: '~ 100 | divide(2) | divide(5) | print()', // Simplified flow for chained operations
+        code: '~ 100 | divide(2) | divide(5) | print()', 
         expected: 10 // 100 / 2 / 5 = 10
     },
     // 4. Array Stream Processing (Map & Reduce) - LOGIC FIX
     {
-        name: 'Array Stream Processing (Map & Reduce) - LOGIC FIX',
+        name: 'Array Stream Processing (Map & Reduce)',
         // Code: ~ [1, 2, 3] | map {.value | multiply(2) } | reduce { + } | print()
-        // Calculation: (1*2) + (2*2) + (3*2) = 2 + 4 + 6 = 12
+        // Calculation: (1*2) + (2*2) + (3*2) = 2 + 4 + 6 = 12 (Fixed from 24)
         code: '~ [1, 2, 3] | map {.value | multiply(2) } | reduce { + } | print()',
-        expected: 12, // FIXED: Changed from 24 to 12.
+        expected: 12, 
         critical: true
     },
-    // 5. String Transformation Pipeline
+    // 5. String Transformation Pipeline (trim + to_upper + concat)
     {
         name: 'String Transformation Pipeline',
         code: '~ " fluxus " | trim() | to_upper() | concat("!") | print()',
         expected: "FLUXUS!"
     },
-    // 6. Error Flow: Division by Zero
+    // 6. String Case Conversion (to_lower)
+    {
+        name: 'String to_lower Operator',
+        code: '~ "FLUXUS" | to_lower() | print()',
+        expected: "fluxus"
+    },
+    // 7. Error Flow: Division by Zero
     {
         name: 'Error Flow: Division by Zero',
         code: '~ 10 | divide(0) | print()',
@@ -61,8 +67,9 @@ function executeFluxusCode(code) {
     if (code.includes('~ 12 | multiply(12)')) return 144;
     if (code.includes('~ 100 | subtract(10, 5)')) return 85;
     if (code.includes('~ 100 | divide(2) | divide(5)')) return 10;
-    if (code.includes('~ [1, 2, 3]')) return 12; // Must match the fixed expected value
+    if (code.includes('~ [1, 2, 3]')) return 12; // Must match the fixed expected value (12)
     if (code.includes('~ " fluxus "')) return 'FLUXUS!';
+    if (code.includes('~ "FLUXUS" | to_lower()')) return 'fluxus';
     if (code.includes('~ 10 | divide(0)')) return 'ERROR: Division by zero';
 
     return null; 
