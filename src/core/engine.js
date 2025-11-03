@@ -148,10 +148,29 @@ export class RuntimeEngine {
             console.log(` Output: ${inputData}`);
             return inputData;
         }
+        
+        // FIX: Implement N-ary Subtraction Logic (as per test-run.js specification)
+        // Checks the 'name' and 'args' fields that were added in the parser.
+        if (node.name === 'subtract' && node.args && node.args.length > 0) {
+            let result = inputData;
+            for (const arg of node.args) {
+                // Convert argument to a number for calculation
+                const numArg = parseFloat(arg);
+                if (isNaN(numArg)) {
+                    console.error(`Runtime Error: 'subtract' argument must be a number, got '${arg}'.`);
+                    return inputData; 
+                }
+                result -= numArg;
+            }
+            return result;
+        }
+
+        // Existing add(1) stub: needs to be more robust, but kept for minimal change
         if (node.value.includes('add(1)')) {
              // Simulates the calculation for the counter example
              return inputData + 1;
         }
+        
         return inputData; 
     }
     
@@ -171,9 +190,21 @@ export class RuntimeEngine {
     }
     
     parseLiteralValue(value) {
-        if (value === '0') return 0; // Initial value for the counter
-        if (value.startsWith('{')) return JSON.parse(value); // Object literals
-        if (value.startsWith('[')) return JSON.parse(value); // Array literals
+        // Updated to handle array/object literals from the parser fix
+        if (value.startsWith('{') || value.startsWith('[')) {
+             try {
+                 return JSON.parse(value);
+             } catch (e) {
+                 // Return as string if JSON parsing fails
+                 return value;
+             }
+        }
+        
+        // Standard numerical and string handling
+        if (!isNaN(value) && value.trim() !== '') return parseFloat(value);
+        // Remove quotes for string literals if they are present
+        if (value.startsWith(`'`) && value.endsWith(`'`)) return value.slice(1, -1);
+        if (value.startsWith(`"`) && value.endsWith(`"`)) return value.slice(1, -1);
         
         return value;
     }
