@@ -9,7 +9,7 @@ import { GraphParser } from './core/parser.js';
 
 // --- MAIN CONSTANTS ---
 const ARGS = process.argv.slice(2);
-const COMMAND = ARGS;
+const COMMAND = ARGS[0]; // FIX: Use the first argument as the command string
 const FILENAME = ARGS[1];
 const VERSION = '1.0.0';
 
@@ -25,7 +25,7 @@ function loadSourceFile(path) {
         const fs = require('fs');
         return fs.readFileSync(path, 'utf-8');
     } catch (e) {
-        console.error(`\n💥 ERROR: Could not find or read file: ${path}`);
+        console.error(`\n徴 ERROR: Could not find or read file: ${path}`);
         process.exit(1);
     }
 }
@@ -36,7 +36,7 @@ function loadSourceFile(path) {
  */
 function runProgram(ast) {
     const engine = new RuntimeEngine();
-    console.log(`\n🌊 Executing Fluxus Program...`);
+    console.log(`\n穴 Executing Fluxus Program...`);
     // The core of Fluxus is non-blocking; the engine starts listening for events.
     engine.start(ast); 
 }
@@ -71,7 +71,7 @@ function handleParse() {
     const parser = new GraphParser();
     const ast = parser.parse(source);
     
-    console.log(`\n🌊 Parsed Stream Graph for ${FILENAME}:`);
+    console.log(`\n穴 Parsed Stream Graph for ${FILENAME}:`);
     console.log(JSON.stringify(ast, null, 2));
 }
 
@@ -87,12 +87,12 @@ function handleCompile() {
     const compiler = new Compiler();
     const compiledAst = compiler.compile(ast);
     
-    console.log(`\n🛡️ Compiled AST (Type Checked and Optimized) for ${FILENAME}:`);
+    console.log(`\n孱ｸCompiled AST (Type Checked and Optimized) for ${FILENAME}:`);
     console.log(JSON.stringify(compiledAst, null, 2));
 }
 
 function handleRepl() {
-    console.log(`\n🌊 Fluxus REPL v${VERSION}`);
+    console.log(`\n穴 Fluxus REPL v${VERSION}`);
     console.log(`Type Fluxus stream syntax to execute (Ctrl+C to exit).`);
     // Placeholder for REPL logic implementation
 }
@@ -141,7 +141,7 @@ try {
     main();
 } catch (e) {
     if (e.code!== 'MODULE_NOT_FOUND') {
-        console.error(`\n💥 Fatal Runtime Error: ${e.message}`);
+        console.error(`\n徴 Fatal Runtime Error: ${e.message}`);
     }
     // Error handling for module requires (like 'fs') if run without proper setup
 }
