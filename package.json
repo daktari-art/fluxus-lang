@@ -7,16 +7,17 @@
   "bin": {
     "fluxus": "./src/cli.js"
   },
-  "scripts": {
-    "start": "node src/cli.js",
-    "test": "node test-run.js",
-    "dev": "node --watch src/cli.js run examples/counter.flux",
-    "repl": "node src/cli.js repl",
-    "compile": "node src/cli.js compile examples/login.flux",
-    "parse": "node src/cli.js parse examples/arithmetic.flux",
-    "examples": "node src/cli.js run examples/login.flux",
-    "coverage": "node --test test-run.js"
+    "scripts": {
+    "start": "node --experimental-specifier-resolution=node src/cli.js",
+    "test": "node --experimental-specifier-resolution=node test-run.js",
+    "dev": "node --watch --experimental-specifier-resolution=node src/cli.js run examples/counter.flux",
+    "repl": "node --experimental-specifier-resolution=node src/cli.js repl",
+    "compile": "node --experimental-specifier-resolution=node src/cli.js compile examples/login.flux",
+    "parse": "node --experimental-specifier-resolution=node src/cli.js parse examples/arithmetic.flux",
+    "examples": "node --experimental-specifier-resolution=node src/cli.js run examples/login.flux",
+    "coverage": "node --experimental-specifier-resolution=node --test test-run.js"
   },
+  
   "keywords": [
     "reactive-programming",
     "dataflow",
