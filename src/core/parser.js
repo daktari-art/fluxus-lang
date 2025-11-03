@@ -39,8 +39,8 @@ export class GraphParser {
     parse(source) {
         const ast = { 
             type: 'Program', 
-            nodes:, 
-            connections:, 
+            nodes: [], // Corrected
+            connections: [], // Corrected
             pools: {},
             functions: {},
             metadata: { source, timestamp: Date.now() }
@@ -52,10 +52,7 @@ export class GraphParser {
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim();
 
-            if (line.startsWith('#') |
-
-| line === '' |
-| line.startsWith('FLOW')) continue; // Skip comments and imports (handled by compiler)
+            if (line.startsWith('#') || line === '' || line.startsWith('FLOW')) continue; // Skip comments and imports (handled by compiler)
 
             // 1. Check for Pool Declaration (e.g., let count = <|> 0)
             if (line.includes('<|>')) {
@@ -85,34 +82,26 @@ export class GraphParser {
      */
     tokenizeLine(line) {
         // A simpler, more robust tokenization focusing on sequence: Source -> Connector -> Operator/Sink
-        const tokens =;
-        // Pattern matches: [~? value], [| name()], [| name], [| to_pool], [-> name], [value]
-        const simpleTokenRegex = /((~?\s*[A-Z_a-z]+\s*)|(~?\s*[\d\.]+|'[^']+'|"[^"]+")|(\w+\s*\(.*?\))|(\w+)|(\s*\|\s*|\s*->\s*|\s*<-\s*))/g;
-        
-        let match;
-        simpleTokenRegex.lastIndex = 0;
-        
-        // This is a placeholder simplification of the core parser fix from the earlier chat:
-        // the real parser must correctly identify the token sequence (Source, Operator, Connector)
-        
-        const parts = line.split(/\s*(\|\s*|\s*->\s*|\s*<-\s*)\s*/).filter(p => p.trim()!== '');
+        const tokens = [];
+        // I'll stick to the user's split-based approach but use the updated array in the logic.
+        const parts = line.split(/\s*(\|\s*|\s*->\s*|\s*<-\s*)\s*/).filter(p => p.trim() !== '');
 
-        // If the line starts with a Pool Read (e.g., count -> print()), ensure the pool name is treated as the source
-        if (parts.length > 0 && parts.includes('->') && ast.pools[parts.split('->').trim()]) {
-             tokens.push({ type: 'POOL_READ', value: parts.split('->').trim() });
-        }
-        
         for (const part of parts) {
             if (part.match(/(\s*\|\s*|\s*->\s*|\s*<-\s*)/)) {
                 tokens.push({ type: 'CONNECTOR', value: part.trim() });
             } else if (part.startsWith('~')) {
                 tokens.push({ type: 'SOURCE', value: part.trim() });
-            } else if (part.includes('(') |
-
-| part.includes('{')) {
+            } else if (part.includes('(') || part.includes('{')) {
                 tokens.push({ type: 'OPERATOR', value: part.trim() });
-            } else if (part.trim()!== '') {
-                tokens.push({ type: 'LITERAL_OR_FUNCTION', value: part.trim() });
+            } else if (part.trim() !== '') {
+                // Determine if this is a Pool Read Source (like 'counter') or a literal/function name
+                const isPoolReadCandidate = parts.includes('->'); // Simple proxy check
+                
+                if (isPoolReadCandidate && part.trim() === parts[0].trim()) {
+                     tokens.push({ type: 'POOL_READ', value: part.trim() });
+                } else {
+                     tokens.push({ type: 'LITERAL_OR_FUNCTION', value: part.trim() });
+                }
             }
         }
 
@@ -130,23 +119,38 @@ export class GraphParser {
             const token = tokens[i];
             const nextToken = tokens[i + 1];
 
-            if (token.type === 'SOURCE' |
-
-| token.type === 'LITERAL_OR_FUNCTION' |
-| token.type === 'POOL_READ') {
+            if (token.type === 'SOURCE' || token.type === 'LITERAL_OR_FUNCTION' || token.type === 'POOL_READ' || token.type === 'OPERATOR') { // Added 'OPERATOR' here
                 
-                // Create Node for Source, Operator, or Sink
-                const newNode = {
-                    id: generateUUID(),
-                    type: token.type === 'POOL_READ'? 'POOL_READ_SOURCE' : this.determineNodeType(token.value),
-                    value: token.value,
-                    line: lineNum,
-                    inputs:,
-                    is_sink: (i === tokens.length - 1 |
-
-| nextToken.type === 'CONNECTOR'),
-                    metadata: {}
-                };
+                let newNode;
+                
+                if (token.type === 'OPERATOR' || this.determineNodeType(token.value) === 'FUNCTION_OPERATOR') {
+                    // FIX: Extract function name and arguments for N-ary operations
+                    const { name, args } = this.extractFuncAndArgs(token.value);
+                    
+                    newNode = {
+                        id: generateUUID(),
+                        type: 'FUNCTION_OPERATOR', // Standard type for operators
+                        value: token.value,
+                        name: name,
+                        args: args, // Store the parsed arguments in the AST node
+                        line: lineNum,
+                        inputs: [],
+                        is_sink: (i === tokens.length - 1 || (nextToken && nextToken.type === 'CONNECTOR')),
+                        metadata: {}
+                    };
+                } else {
+                    // Create Node for Source or Literal
+                    newNode = {
+                        id: generateUUID(),
+                        type: token.type === 'POOL_READ'? 'POOL_READ_SOURCE' : this.determineNodeType(token.value),
+                        value: token.value,
+                        line: lineNum,
+                        inputs: [],
+                        is_sink: (i === tokens.length - 1 || (nextToken && nextToken.type === 'CONNECTOR')),
+                        metadata: {}
+                    };
+                }
+                
                 ast.nodes.push(newNode);
 
                 if (lastNodeId) {
@@ -175,7 +179,7 @@ export class GraphParser {
         const match = line.match(/let\s+(\w+)\s*=\s*<\|>\s*(.*)/);
         if (match) {
             const poolName = match[1];
-            const initialValue = match.[2]trim();
+            const initialValue = match[2].trim(); // Corrected syntax
             ast.pools[poolName] = {
                 id: generateUUID(),
                 name: poolName,
@@ -193,7 +197,7 @@ export class GraphParser {
         const match = line.match(/FUNC\s+(\w+)\s*\((.*?)\)\s*:\s*(.*)/);
         if (match) {
             const funcName = match[1];
-            const args = match.[2]split(',').map(a => a.trim());
+            const args = match[2].split(',').map(a => a.trim()); // Corrected syntax
             
             ast.functions[funcName] = {
                 id: generateUUID(),
@@ -215,8 +219,32 @@ export class GraphParser {
         if (value.startsWith('~')) return 'STREAM_SOURCE_FINITE';
         if (value.includes('(')) return 'FUNCTION_OPERATOR';
         if (value.match(/^['"].*['"]$/)) return 'LITERAL_STRING';
-        if (!isNaN(value) && value.trim()!== '') return 'LITERAL_NUMBER';
+        if (value.startsWith('[') && value.endsWith(']')) return 'LITERAL_ARRAY'; // FIX: Array Literal
+        if (value.startsWith('{') && value.endsWith('}')) return 'LITERAL_OBJECT'; // FIX: Object Literal
+        if (!isNaN(value) && value.trim() !== '') return 'LITERAL_NUMBER';
         
         return 'UNKNOWN_OPERATOR'; // Could be a function node or a named variable access
+    }
+    
+    /**
+     * Helper: Extracts the function name and a list of arguments from a function call string.
+     * e.g., 'subtract(10, 5)' -> { name: 'subtract', args: ['10', '5'] }
+     */
+    extractFuncAndArgs(value) {
+        const funcMatch = value.match(/^(\w+)\s*\((.*)\)$/);
+        if (!funcMatch) {
+            return { name: value, args: [] };
+        }
+
+        const name = funcMatch[1];
+        const argsString = funcMatch[2].trim();
+        
+        let args = [];
+        if (argsString) {
+            // Simple split by comma, trimming whitespace
+            args = argsString.split(',').map(a => a.trim());
+        }
+        
+        return { name, args };
     }
 }
