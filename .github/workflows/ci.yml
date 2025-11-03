@@ -39,3 +39,6 @@ jobs:
       # Executes a generic build script if it existed, ensures compilation step works
       # We use 'compile' from package.json with a core example
       run: npm run compile examples/login.flux
+      
+    - name: Attest Build Provenance
+      uses: actions/attest-build-provenance@v3.0.0
