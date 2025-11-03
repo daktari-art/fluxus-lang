@@ -12,7 +12,6 @@ export class GraphParser {
         this.symbols = {
             '~': 'STREAM_SOURCE', '~?': 'STREAM_SOURCE_LIVE',
             '<>': 'POOL_DECLARATION', 
-            // Standard data types are treated as literal stream sources
             'number': 'DATA_NUMBER', 'string': 'DATA_STRING', 'boolean': 'DATA_BOOLEAN' 
         };
         
@@ -21,194 +20,165 @@ export class GraphParser {
             '->': 'POOL_READ_FLOW',
             '<-': 'POOL_WRITE_FLOW'
         };
-
-        // Regex to capture the entire token set: 
-        // 1. Stream Sources/Pool Declarations (~, ~?, let name = <|>)
-        // 2. Operators/Functions (name()) or names followed by { or |
-        // 3. Connectors (|, ->, | to_pool(...))
-        // 4. Literal values/Types
-        this.tokenRegex = /(~?\s*\[.*?\])|(~?\s*[\d\.]+|'[^']+'|"[^"]+")|(let\s+[^=]+\s*=\s*<\|>\s*.*?)|(\w+\s*\(.*?\))|(\w+)|(\s*\|\s*|\s*->\s*|\s*<-\s*)/g;
     }
 
     /**
-     * Main entry point to parse the Fluxus source code.
-     * Builds the AST defining nodes and connections.
-     * @param {string} source - The raw Fluxus code.
-     * @returns {object} The built Abstract Syntax Tree (AST).
+     * Main entry point: Parses the entire Fluxus source code.
+     * @param {string} sourceCode - The raw Fluxus source.
+     * @returns {object} The Abstract Syntax Tree (AST).
      */
-    parse(source) {
-        const ast = { 
-            type: 'Program', 
-            nodes: [], // Corrected
-            connections: [], // Corrected
+    parse(sourceCode) {
+        const ast = {
+            nodes: [],
+            connections: [],
             pools: {},
-            functions: {},
-            metadata: { source, timestamp: Date.now() }
+            functions: {}
         };
 
-        const lines = source.split('\n');
-        let currentFlowId = null; 
-        
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i].trim();
+        const lines = sourceCode.split('\n').map(line => line.trim()).filter(line => line.length > 0 && !line.startsWith('#'));
+        let previousNodeId = null;
+        let lineNum = 0;
 
-            if (line.startsWith('#') || line === '' || line.startsWith('FLOW')) continue; // Skip comments and imports (handled by compiler)
-
-            // 1. Check for Pool Declaration (e.g., let count = <|> 0)
-            if (line.includes('<|>')) {
-                this.parsePoolDeclaration(line, ast, i + 1);
-                continue;
-            }
-
-            // 2. Check for Function Definition (FUNC block)
-            if (line.startsWith('FUNC')) {
-                // Multi-line parsing required, simplified here to handle definition block
-                this.parseFunctionDefinition(line, lines, i, ast);
-                continue;
-            }
-
-            // 3. Parse Stream Pipeline
-            const tokens = this.tokenizeLine(line);
-            if (tokens.length === 0) continue;
+        for (const line of lines) {
+            lineNum++;
+            // FIX: Use robust, single-regex tokenization
+            const tokens = this.tokenize(line);
             
-            this.parsePipeline(tokens, ast, i + 1);
+            if (tokens.length === 0) continue;
+
+            // --- 1. POOL DECLARATION ---
+            if (line.includes('<|>')) {
+                this.parsePoolDeclaration(line, lineNum, ast);
+                continue;
+            }
+
+            // --- 2. FUNCTION DEFINITION (Stub) ---
+            if (line.startsWith('FUNC ')) {
+                this.parseFunctionDefinition(line, lineNum, ast);
+                continue;
+            }
+            
+            // --- 3. STREAM AND FLOW ---
+            let currentConnectionToken = null;
+            let currentTokenIndex = 0;
+
+            while (currentTokenIndex < tokens.length) {
+                const token = tokens[currentTokenIndex];
+
+                if (this.connectionTypes[token]) {
+                    currentConnectionToken = token;
+                    currentTokenIndex++;
+                    continue;
+                }
+
+                // Parse the Node
+                const newNode = this.parseNode(token, lineNum);
+                ast.nodes.push(newNode);
+
+                // --- CONNECTION LOGIC ---
+                if (currentConnectionToken && previousNodeId) {
+                    ast.connections.push({
+                        id: generateUUID(),
+                        type: this.connectionTypes[currentConnectionToken],
+                        from: previousNodeId,
+                        to: newNode.id,
+                        line: lineNum
+                    });
+                } else if (newNode.type.startsWith('STREAM_SOURCE')) {
+                    // This is the start of a pipeline
+                }
+                
+                previousNodeId = newNode.id;
+                currentConnectionToken = null;
+                currentTokenIndex++;
+            }
         }
 
         return ast;
     }
-    
+
     /**
-     * Breaks a line of Fluxus code into semantic tokens.
+     * Tokenizes a line into meaningful parts, preserving full function calls and complex literals.
+     * @param {string} line - A single line of Fluxus code.
+     * @returns {string[]} An array of tokens.
      */
-    tokenizeLine(line) {
-        // A simpler, more robust tokenization focusing on sequence: Source -> Connector -> Operator/Sink
-        const tokens = [];
-        // I'll stick to the user's split-based approach but use the updated array in the logic.
-        const parts = line.split(/\s*(\|\s*|\s*->\s*|\s*<-\s*)\s*/).filter(p => p.trim() !== '');
-
-        for (const part of parts) {
-            if (part.match(/(\s*\|\s*|\s*->\s*|\s*<-\s*)/)) {
-                tokens.push({ type: 'CONNECTOR', value: part.trim() });
-            } else if (part.startsWith('~')) {
-                tokens.push({ type: 'SOURCE', value: part.trim() });
-            } else if (part.includes('(') || part.includes('{')) {
-                tokens.push({ type: 'OPERATOR', value: part.trim() });
-            } else if (part.trim() !== '') {
-                // Determine if this is a Pool Read Source (like 'counter') or a literal/function name
-                const isPoolReadCandidate = parts.includes('->'); // Simple proxy check
-                
-                if (isPoolReadCandidate && part.trim() === parts[0].trim()) {
-                     tokens.push({ type: 'POOL_READ', value: part.trim() });
-                } else {
-                     tokens.push({ type: 'LITERAL_OR_FUNCTION', value: part.trim() });
-                }
-            }
-        }
-
-        return tokens;
+    tokenize(line) {
+        // Regex to match tokens: 
+        // 1. Literal Strings ('...' or "...")
+        // 2. Complex Literals (Arrays: [...], Objects/Lenses: {...}) - CRITICAL for map/reduce
+        // 3. Functions/Operators (word(...)) or Pool Sinks (to_pool(...))
+        // 4. Symbols (|, ->, <-, ~)
+        // 5. Everything else (numbers, words, etc.)
+        const regex = /('[^']*'|"[^"]*"|\{.*?\}|\[.*?\]|to_pool\s*\(.*?\)|->|<-|\||\S+)/g;
+        return line.match(regex) || [];
     }
 
     /**
-     * Parses a single stream pipeline line into nodes and connections.
+     * Parses a single token into an AST Node object.
      */
-    parsePipeline(tokens, ast, lineNum) {
-        let lastNodeId = null;
-        let flowType = 'PIPE_FLOW'; // Default flow
+    parseNode(token, lineNum) {
+        let type = this.determineNodeType(token);
+        let name = type;
+        let value = token;
+        let args = [];
 
-        for (let i = 0; i < tokens.length; i++) {
-            const token = tokens[i];
-            const nextToken = tokens[i + 1];
-
-            if (token.type === 'SOURCE' || token.type === 'LITERAL_OR_FUNCTION' || token.type === 'POOL_READ' || token.type === 'OPERATOR') { // Added 'OPERATOR' here
-                
-                let newNode;
-                
-                if (token.type === 'OPERATOR' || this.determineNodeType(token.value) === 'FUNCTION_OPERATOR') {
-                    // FIX: Extract function name and arguments for N-ary operations
-                    const { name, args } = this.extractFuncAndArgs(token.value);
-                    
-                    newNode = {
-                        id: generateUUID(),
-                        type: 'FUNCTION_OPERATOR', // Standard type for operators
-                        value: token.value,
-                        name: name,
-                        args: args, // Store the parsed arguments in the AST node
-                        line: lineNum,
-                        inputs: [],
-                        is_sink: (i === tokens.length - 1 || (nextToken && nextToken.type === 'CONNECTOR')),
-                        metadata: {}
-                    };
-                } else {
-                    // Create Node for Source or Literal
-                    newNode = {
-                        id: generateUUID(),
-                        type: token.type === 'POOL_READ'? 'POOL_READ_SOURCE' : this.determineNodeType(token.value),
-                        value: token.value,
-                        line: lineNum,
-                        inputs: [],
-                        is_sink: (i === tokens.length - 1 || (nextToken && nextToken.type === 'CONNECTOR')),
-                        metadata: {}
-                    };
-                }
-                
-                ast.nodes.push(newNode);
-
-                if (lastNodeId) {
-                    // Create Connection from the previous node to this new node
-                    ast.connections.push({
-                        id: generateUUID(),
-                        from: lastNodeId,
-                        to: newNode.id,
-                        type: flowType,
-                        label: null
-                    });
-                    flowType = 'PIPE_FLOW'; // Reset flow type
-                }
-                
-                lastNodeId = newNode.id; // Update current node
-            } else if (token.type === 'CONNECTOR') {
-                flowType = token.value === '->'? 'POOL_READ_FLOW' : token.value === '<-'? 'POOL_WRITE_FLOW' : 'PIPE_FLOW';
+        if (type === 'FUNCTION_OPERATOR') {
+            const match = token.match(/^(\w+)\s*\((.*)\)$/);
+            if (match) {
+                name = match[1];
+                const argsString = match[2];
+                // FIX: Correctly split N-ary arguments
+                args = argsString.split(',').map(a => a.trim()).filter(a => a.length > 0);
             }
+        } else if (type === 'STREAM_SOURCE_FINITE' || type === 'STREAM_SOURCE_LIVE') {
+            value = token.replace(/^~+\s*/, '').trim(); 
         }
+
+        return {
+            id: generateUUID(),
+            type,
+            name,
+            value,
+            args,
+            line: lineNum
+        };
     }
-    
+
     /**
-     * Parses a line containing a Pool declaration.
+     * Parses a Tidal Pool Declaration: `let name = <|> initial_value`
      */
-    parsePoolDeclaration(line, ast, lineNum) {
+    parsePoolDeclaration(line, lineNum, ast) {
         const match = line.match(/let\s+(\w+)\s*=\s*<\|>\s*(.*)/);
         if (match) {
             const poolName = match[1];
-            const initialValue = match[2].trim(); // Corrected syntax
+            const initialValue = match[2].trim();
+            
             ast.pools[poolName] = {
                 id: generateUUID(),
                 name: poolName,
                 initial: initialValue,
                 line: lineNum,
-                value: null // Value is managed by the Runtime Engine
+                value: null
             };
         }
     }
 
     /**
-     * Placeholder for the multi-line function definition parser.
+     * Placeholder for the function definition parser.
      */
-    parseFunctionDefinition(line, lines, startLineIndex, ast) {
+    parseFunctionDefinition(line, lineNum, ast) {
         const match = line.match(/FUNC\s+(\w+)\s*\((.*?)\)\s*:\s*(.*)/);
         if (match) {
             const funcName = match[1];
-            const args = match[2].split(',').map(a => a.trim()); // Corrected syntax
+            const args = match[2].split(',').map(a => a.trim()).filter(a => a.length > 0);
             
             ast.functions[funcName] = {
                 id: generateUUID(),
                 name: funcName,
                 args: args,
-                startLine: startLineIndex + 1,
-                // The body parsing (internal AST) is handled later in the compiler/linker
+                startLine: lineNum,
             };
         }
-        // In a real compiler, we would now iterate through subsequent lines 
-        // until a closing block or 'END_FUNC' marker is found.
     }
 
     /**
@@ -219,32 +189,10 @@ export class GraphParser {
         if (value.startsWith('~')) return 'STREAM_SOURCE_FINITE';
         if (value.includes('(')) return 'FUNCTION_OPERATOR';
         if (value.match(/^['"].*['"]$/)) return 'LITERAL_STRING';
-        if (value.startsWith('[') && value.endsWith(']')) return 'LITERAL_ARRAY'; // FIX: Array Literal
-        if (value.startsWith('{') && value.endsWith('}')) return 'LITERAL_OBJECT'; // FIX: Object Literal
+        // Correctly handles Array and Object/Lens literals
+        if (value.startsWith('[') || value.startsWith('{')) return 'LITERAL_COLLECTION'; 
         if (!isNaN(value) && value.trim() !== '') return 'LITERAL_NUMBER';
         
-        return 'UNKNOWN_OPERATOR'; // Could be a function node or a named variable access
-    }
-    
-    /**
-     * Helper: Extracts the function name and a list of arguments from a function call string.
-     * e.g., 'subtract(10, 5)' -> { name: 'subtract', args: ['10', '5'] }
-     */
-    extractFuncAndArgs(value) {
-        const funcMatch = value.match(/^(\w+)\s*\((.*)\)$/);
-        if (!funcMatch) {
-            return { name: value, args: [] };
-        }
-
-        const name = funcMatch[1];
-        const argsString = funcMatch[2].trim();
-        
-        let args = [];
-        if (argsString) {
-            // Simple split by comma, trimming whitespace
-            args = argsString.split(',').map(a => a.trim());
-        }
-        
-        return { name, args };
+        return 'UNKNOWN_OPERATOR';
     }
 }
