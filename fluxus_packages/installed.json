@@ -1,0 +1,15 @@
+{
+  "packages": {
+    "http": {
+      "name": "http",
+      "version": "1.0.0",
+      "installed": "2025-11-05T18:49:45.513Z",
+      "operators": [
+        "fetch_url",
+        "websocket_stream",
+        "http_request"
+      ],
+      "description": "HTTP client and server operations for network communication"
+    }
+  }
+}

@@ -5,16 +5,26 @@
   "main": "src/cli.js",
   "type": "module",
   "bin": {
-    "fluxus": "src/cli.js"
+    "fluxus": "./src/cli.js"
   },
   "scripts": {
+    "postinstall": "node install.js",
+    "install:global": "node install.js --global",
     "start": "node src/cli.js",
     "test": "node test-run.js",
     "dev": "node --watch src/cli.js run examples/counter.flux",
     "repl": "node src/cli.js repl",
     "compile": "node src/cli.js compile examples/login.flux",
     "parse": "node src/cli.js parse examples/arithmetic.flux",
-    "examples": "node src/cli.js run examples/login.flux",
+    "examples": "node src/cli.js run examples/hello.flux && node src/cli.js run examples/arithmetic.flux",
+    "tutorial": "node src/cli.js tutorial",
+    "dashboard": "node src/cli.js dashboard",
+    "profile": "node src/cli.js profile examples/arithmetic.flux",
+    "install-pkg": "node src/cli.js install",
+    "uninstall-pkg": "node src/cli.js uninstall",
+    "list-pkgs": "node src/cli.js list",
+    "search-pkgs": "node src/cli.js search",
+    "exit-help": "node src/exit_helper.js",
     "coverage": "node --test test-run.js"
   },
   "keywords": [
@@ -23,7 +33,9 @@
     "stream-programming",
     "functional-programming",
     "fluxus",
-    "asynchronous"
+    "asynchronous",
+    "termux",
+    "mobile-development"
   ],
   "author": "Fluxus Contributors",
   "license": "MIT",
@@ -36,8 +48,11 @@
   },
   "files": [
     "src",
+    "examples",
     "cli.js",
-    "test-run.js"
+    "test-run.js",
+    "install.js",
+    "*.md"
   ],
   "dependencies": {},
   "devDependencies": {}

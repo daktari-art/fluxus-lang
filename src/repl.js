@@ -1,5 +1,5 @@
 // FILENAME: src/repl.js
-// Fluxus Language REPL v2.0 - Enhanced with Syntax Highlighting, Error Recovery & Auto-completion
+// Fluxus Language REPL v3.0 - Visual Debugger & Advanced Analytics
 
 import readline from 'readline';
 import { GraphParser } from './core/parser.js';
@@ -12,8 +12,10 @@ export class FluxusREPL {
         this.history = [];
         this.currentInput = '';
         this.inMultiLine = false;
+        this.debugMode = false;
+        this.visualizationMode = false;
         
-        // Enhanced: Auto-completion candidates
+        // Enhanced: Auto-completion with categories
         this.operators = [
             'add', 'subtract', 'multiply', 'divide', 'map', 'reduce', 'filter',
             'trim', 'to_upper', 'to_lower', 'concat', 'break', 'join', 'word_count',
@@ -26,15 +28,16 @@ export class FluxusREPL {
             input: process.stdin,
             output: process.stdout,
             prompt: 'fluxus> ',
-            historySize: 100,
+            historySize: 1000, // Increased for better history
             removeHistoryDuplicates: true,
             completer: (line) => this.autoComplete(line)
         });
 
         this.supportsColor = process.stdout.isTTY;
+        this.streamHistory = []; // Track stream executions for visualization
     }
 
-    // Enhanced: Syntax highlighting
+    // Enhanced: Advanced syntax highlighting with semantic understanding
     highlightSyntax(code) {
         if (!this.supportsColor) return code;
         
@@ -52,27 +55,41 @@ export class FluxusREPL {
             // Functions
             .replace(/\b(\w+)(?=\()/g, '\x1b[1;36m$1\x1b[0m')
             // Comments
-            .replace(/(#.*$)/gm, '\x1b[90m$1\x1b[0m');
+            .replace(/(#.*$)/gm, '\x1b[90m$1\x1b[0m')
+            // Lenses
+            .replace(/\{([^}]+)\}/g, '\x1b[38;5;208m{$1}\x1b[0m');
     }
 
     color(text, colorCode) {
         return this.supportsColor ? `\x1b[${colorCode}m${text}\x1b[0m` : text;
     }
 
-    // Enhanced: Auto-completion
+    // Enhanced: Smart auto-completion with context awareness
     autoComplete(line) {
         const hits = [];
         const currentWord = line.split(/\s+/).pop() || '';
         
-        // Complete operators
-        this.operators.forEach(op => {
-            if (op.startsWith(currentWord)) hits.push(op);
-        });
-        
-        // Complete keywords
-        this.keywords.forEach(kw => {
-            if (kw.startsWith(currentWord)) hits.push(kw);
-        });
+        // Context-aware completion
+        if (line.includes('|') && !line.includes('print') && !line.includes('to_pool')) {
+            // Complete operators after pipe
+            this.operators.forEach(op => {
+                if (op.startsWith(currentWord)) hits.push(op);
+            });
+        } else if (line.includes('let') && line.includes('=')) {
+            // Complete operators in assignment context
+            this.operators.forEach(op => {
+                if (op.startsWith(currentWord)) hits.push(op);
+            });
+        } else {
+            // Complete everything
+            this.operators.forEach(op => {
+                if (op.startsWith(currentWord)) hits.push(op);
+            });
+            
+            this.keywords.forEach(kw => {
+                if (kw.startsWith(currentWord)) hits.push(kw);
+            });
+        }
         
         // Complete pool names
         Object.keys(this.engine.pools).forEach(pool => {
@@ -83,9 +100,9 @@ export class FluxusREPL {
     }
 
     start() {
-        console.log(this.color('🌊 Fluxus Language REPL v2.0', '1;36'));
+        console.log(this.color('🌊 Fluxus Language REPL v3.0', '1;36'));
         console.log('Type Fluxus code to execute. Type "exit" to quit.');
-        console.log('Special commands: .help, .clear, .examples, .pools, .debug\n');
+        console.log('Special commands: .help, .clear, .examples, .pools, .debug, .viz, .history\n');
         
         this.rl.prompt();
 
@@ -114,6 +131,32 @@ export class FluxusREPL {
         }
 
         if (input === '' || input.startsWith('#')) {
+            this.rl.prompt();
+            return;
+        }
+
+        // Enhanced: Command history search
+        if (input === '!!') {
+            const lastCommand = this.history[this.history.length - 1];
+            if (lastCommand) {
+                console.log(this.color(`↻ Replaying: ${this.highlightSyntax(lastCommand)}`, '90'));
+                this.execute(lastCommand);
+            } else {
+                console.log(this.color('❌ No previous command found', '31'));
+            }
+            this.rl.prompt();
+            return;
+        }
+
+        if (input.startsWith('!')) {
+            const searchTerm = input.substring(1);
+            const found = this.searchHistory(searchTerm);
+            if (found) {
+                console.log(this.color(`↻ Replaying: ${this.highlightSyntax(found)}`, '90'));
+                this.execute(found);
+            } else {
+                console.log(this.color(`❌ No command matching "${searchTerm}" found`, '31'));
+            }
             this.rl.prompt();
             return;
         }
@@ -157,31 +200,63 @@ export class FluxusREPL {
         this.rl.prompt();
     }
 
+    // Enhanced: Command history search
+    searchHistory(term) {
+        for (let i = this.history.length - 1; i >= 0; i--) {
+            if (this.history[i].includes(term)) {
+                return this.history[i];
+            }
+        }
+        return null;
+    }
+
     isPoolInspection(input) {
         return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(input) && 
                !['exit', 'quit', 'help'].includes(input) &&
                this.engine.pools[input] !== undefined;
     }
 
+    // Enhanced: Advanced pool inspection with analytics
     inspectPool(poolName) {
         const pool = this.engine.pools[poolName];
         if (pool) {
             console.log(this.color(`🏊 ${poolName} = ${pool.value}`, '36'));
-            if (pool.history && Array.isArray(pool.history)) {
-                console.log(this.color(`   History: ${pool.history.length} updates`, '90'));
-            } else if (pool._updates !== undefined) {
-                console.log(this.color(`   Updates: ${pool._updates}`, '90'));
-            }
             
-            // Enhanced: Show pool type and structure
+            // Enhanced analytics
             const valueType = Array.isArray(pool.value) ? 'Array' : typeof pool.value;
             console.log(this.color(`   Type: ${valueType}`, '90'));
             
             if (Array.isArray(pool.value)) {
                 console.log(this.color(`   Length: ${pool.value.length}`, '90'));
+                console.log(this.color(`   Sample: [${pool.value.slice(0, 3).join(', ')}${pool.value.length > 3 ? '...' : ''}]`, '90'));
+            }
+            
+            if (pool.history && Array.isArray(pool.history)) {
+                console.log(this.color(`   History: ${pool.history.length} updates`, '90'));
+                // Show value trends
+                if (pool.history.length > 1) {
+                    const first = pool.history[0];
+                    const last = pool.history[pool.history.length - 1];
+                    if (typeof first === 'number' && typeof last === 'number') {
+                        const change = last - first;
+                        const trend = change > 0 ? '📈' : change < 0 ? '📉' : '➡️';
+                        console.log(this.color(`   Trend: ${trend} ${change > 0 ? '+' : ''}${change}`, '90'));
+                    }
+                }
+            }
+            
+            if (pool._updates !== undefined) {
+                console.log(this.color(`   Total Updates: ${pool._updates}`, '90'));
             }
         } else {
             console.log(this.color(`❌ Pool '${poolName}' not found`, '31'));
+            // Enhanced: Suggest similar pool names
+            const similar = Object.keys(this.engine.pools).filter(p => 
+                p.includes(poolName) || poolName.includes(p)
+            );
+            if (similar.length > 0) {
+                console.log(this.color(`💡 Did you mean: ${similar.join(', ')}?`, '90'));
+            }
         }
     }
 
@@ -222,26 +297,31 @@ export class FluxusREPL {
     }
 
     handleCommand(cmd) {
-        switch (cmd) {
+        const [command, arg] = cmd.split(' ');
+        
+        switch (command) {
             case '.help':
                 console.log('\n' + this.color('📖 REPL Commands:', '1;33'));
                 console.log('  .help      - Show this help');
                 console.log('  .clear     - Clear the screen');
                 console.log('  .examples  - Show example code');
                 console.log('  .pools     - Show all Tidal Pools');
-                console.log('  .history   - Show command history');
+                console.log('  .history   - Show/search command history');
                 console.log('  .debug     - Toggle debug mode');
+                console.log('  .viz       - Toggle stream visualization');
                 console.log('  .operators - List available operators');
+                console.log('  .stats     - Show runtime statistics');
                 console.log('  exit       - Exit the REPL');
-                console.log('\n' + this.color('💡 Tips:', '1;33'));
-                console.log('  - Press TAB for auto-completion');
-                console.log('  - Type pool names to inspect values');
-                console.log('  - Use multi-line for complex expressions');
+                console.log('\n' + this.color('💡 Advanced Features:', '1;33'));
+                console.log('  !!         - Repeat last command');
+                console.log('  !text      - Repeat last command containing "text"');
+                console.log('  TAB        - Auto-completion');
+                console.log('  Multi-line - Automatic for complex expressions');
                 break;
                 
             case '.clear':
                 console.clear();
-                console.log(this.color('🌊 Fluxus Language REPL v2.0', '1;36'));
+                console.log(this.color('🌊 Fluxus Language REPL v3.0', '1;36'));
                 break;
                 
             case '.examples':
@@ -265,15 +345,25 @@ export class FluxusREPL {
                 break;
                 
             case '.history':
-                console.log('\n' + this.color('📜 Command History:', '1;33'));
-                this.history.slice(-10).forEach((cmd, i) => {
-                    console.log(`  ${i + 1}. ${this.highlightSyntax(cmd)}`);
-                });
+                if (arg) {
+                    this.searchAndShowHistory(arg);
+                } else {
+                    this.showHistory();
+                }
                 break;
                 
             case '.debug':
                 this.debugMode = !this.debugMode;
+                this.engine.debugMode = this.debugMode;
                 console.log(this.color(`🔧 Debug mode: ${this.debugMode ? 'ON' : 'OFF'}`, this.debugMode ? '33' : '90'));
+                break;
+                
+            case '.viz':
+                this.visualizationMode = !this.visualizationMode;
+                console.log(this.color(`📊 Visualization: ${this.visualizationMode ? 'ON' : 'OFF'}`, this.visualizationMode ? '33' : '90'));
+                if (this.visualizationMode) {
+                    this.showStreamVisualization();
+                }
                 break;
                 
             case '.operators':
@@ -281,8 +371,81 @@ export class FluxusREPL {
                 console.log('  ' + this.operators.join(', '));
                 break;
                 
+            case '.stats':
+                this.showRuntimeStats();
+                break;
+                
             default:
                 console.log(this.color(`❌ Unknown command: ${cmd}. Type .help for available commands.`, '31'));
+        }
+    }
+
+    // Enhanced: Command history with search
+    showHistory() {
+        console.log('\n' + this.color('📜 Command History:', '1;33'));
+        const recentHistory = this.history.slice(-20);
+        recentHistory.forEach((cmd, i) => {
+            const index = this.history.length - recentHistory.length + i + 1;
+            console.log(`  ${index}. ${this.highlightSyntax(cmd)}`);
+        });
+    }
+
+    searchAndShowHistory(term) {
+        console.log('\n' + this.color(`🔍 History search for "${term}":`, '1;33'));
+        const matches = this.history.filter(cmd => cmd.includes(term));
+        if (matches.length > 0) {
+            matches.slice(-10).forEach((cmd, i) => {
+                console.log(`  ${this.history.indexOf(cmd) + 1}. ${this.highlightSyntax(cmd)}`);
+            });
+        } else {
+            console.log('  No matching commands found');
+        }
+    }
+
+    // Enhanced: Stream visualization
+    showStreamVisualization() {
+        console.log('\n' + this.color('📊 Stream Visualization', '1;33'));
+        console.log(this.color('┌─ Fluxus Stream Flow ──────────────────────────┐', '90'));
+        
+        const pools = Object.keys(this.engine.pools);
+        if (pools.length === 0) {
+            console.log(this.color('│  No active streams or pools                 │', '90'));
+        } else {
+            pools.forEach(poolName => {
+                const pool = this.engine.pools[poolName];
+                const valueStr = Array.isArray(pool.value) ? 
+                    `[${pool.value.slice(0, 2).join(',')}${pool.value.length > 2 ? '...' : ''}]` : 
+                    String(pool.value);
+                
+                console.log(this.color(`│  ${poolName.padEnd(12)} = ${valueStr.padEnd(15)} (${pool._updates || 0} updates) │`, '90'));
+            });
+        }
+        console.log(this.color('└───────────────────────────────────────────────┘', '90'));
+    }
+
+    // Enhanced: Runtime statistics
+    showRuntimeStats() {
+        console.log('\n' + this.color('📈 Runtime Statistics', '1;33'));
+        const pools = Object.keys(this.engine.pools);
+        const totalUpdates = pools.reduce((sum, poolName) => 
+            sum + (this.engine.pools[poolName]._updates || 0), 0);
+        
+        console.log(this.color(`  Active Pools: ${pools.length}`, '90'));
+        console.log(this.color(`  Total Updates: ${totalUpdates}`, '90'));
+        console.log(this.color(`  Command History: ${this.history.length} entries`, '90'));
+        console.log(this.color(`  Memory Usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`, '90'));
+        
+        // Show most active pools
+        if (pools.length > 0) {
+            console.log(this.color('\n  Most Active Pools:', '90'));
+            const sortedPools = pools.sort((a, b) => 
+                (this.engine.pools[b]._updates || 0) - (this.engine.pools[a]._updates || 0)
+            ).slice(0, 3);
+            
+            sortedPools.forEach(poolName => {
+                const pool = this.engine.pools[poolName];
+                console.log(this.color(`    ${poolName}: ${pool._updates || 0} updates`, '90'));
+            });
         }
     }
 
@@ -315,11 +478,11 @@ export class FluxusREPL {
         });
     }
 
-    // Enhanced: Better error handling with line numbers
+    // Enhanced: Advanced execution with visualization
     execute(code) {
         if (!this.inMultiLine) {
             this.history.push(code);
-            if (this.history.length > 100) this.history.shift();
+            if (this.history.length > 1000) this.history.shift();
         }
 
         try {
@@ -330,11 +493,23 @@ export class FluxusREPL {
 
             const ast = this.parser.parse(processedCode);
             
+            // Enhanced: Stream visualization
+            if (this.visualizationMode) {
+                this.visualizeStream(ast, code);
+            }
+            
             // Enhanced: Debug mode shows AST
             if (this.debugMode) {
                 console.log(this.color('🔍 AST Structure:', '90'));
                 console.log(JSON.stringify(ast, null, 2));
             }
+            
+            // Track stream execution for analytics
+            this.streamHistory.push({
+                code,
+                timestamp: new Date(),
+                poolsBefore: { ...this.engine.pools }
+            });
             
             // Capture console output during execution
             const originalLog = console.log;
@@ -355,6 +530,11 @@ export class FluxusREPL {
             // Restore console.log
             console.log = originalLog;
             
+            // Enhanced: Update stream history with results
+            const lastExecution = this.streamHistory[this.streamHistory.length - 1];
+            lastExecution.poolsAfter = { ...this.engine.pools };
+            lastExecution.outputs = outputs;
+            
             // Display captured outputs
             outputs.forEach(output => {
                 if (output.includes('Output:')) {
@@ -369,33 +549,74 @@ export class FluxusREPL {
             });
 
         } catch (error) {
-            // Enhanced: Better error messages
+            // Enhanced: Advanced error recovery with suggestions
             let errorMessage = error.message;
             
-            // Add line number context if available
             if (error.line) {
                 errorMessage = `Line ${error.line}: ${errorMessage}`;
             }
             
-            // Enhanced: Suggest fixes for common errors
+            // Enhanced: Context-aware error suggestions
             if (error.message.includes('Unexpected token')) {
-                errorMessage += '\n💡 Check for missing operators or unbalanced brackets';
+                const suggestions = [];
+                if (code.includes('{') && !code.includes('}')) {
+                    suggestions.push('Add closing brace "}"');
+                }
+                if (code.includes('(') && !code.includes(')')) {
+                    suggestions.push('Add closing parenthesis ")"');
+                }
+                if (code.includes('|') && code.split('|').length < 2) {
+                    suggestions.push('Add an operator after "|"');
+                }
+                
+                if (suggestions.length > 0) {
+                    errorMessage += '\n💡 ' + suggestions.join(', ');
+                }
             } else if (error.message.includes('not defined')) {
-                errorMessage += '\n💡 Make sure pools are declared with "let name = <|> value"';
+                const poolMatch = error.message.match(/'(\w+)'/);
+                if (poolMatch) {
+                    errorMessage += `\n💡 Declare it with: let ${poolMatch[1]} = <|> initial_value`;
+                }
             } else if (error.message.includes('Division by zero')) {
-                errorMessage += '\n💡 Add a filter to prevent zero values before division';
+                errorMessage += '\n💡 Add a filter: | filter {.value != 0} | divide(...)';
+            } else if (error.message.includes('expects an Array')) {
+                errorMessage += '\n💡 Use array literal: [1, 2, 3] or convert with .split()';
             }
             
             console.log(this.color(`❌ ${errorMessage}`, '31'));
             
-            // Enhanced: Show the problematic code snippet in debug mode
+            // Enhanced: Show the problematic code snippet with context
             if (this.debugMode && error.line) {
                 const lines = code.split('\n');
                 const problemLine = lines[error.line - 1];
                 if (problemLine) {
-                    console.log(this.color(`   Problematic line: ${problemLine.trim()}`, '90'));
+                    console.log(this.color(`   Problematic line: ${this.highlightSyntax(problemLine.trim())}`, '90'));
                 }
             }
         }
+    }
+
+    // Enhanced: Stream visualization
+    visualizeStream(ast, code) {
+        console.log('\n' + this.color('📊 Stream Flow Visualization', '1;33'));
+        console.log(this.color('┌─ Pipeline Structure ──────────────────────────┐', '90'));
+        
+        const nodes = ast.nodes.filter(n => 
+            n.type === 'STREAM_SOURCE_FINITE' || n.type === 'FUNCTION_OPERATOR'
+        );
+        
+        nodes.forEach((node, index) => {
+            const isSource = node.type === 'STREAM_SOURCE_FINITE';
+            const nodeType = isSource ? 'SOURCE' : node.name.toUpperCase();
+            const valuePreview = isSource ? 
+                node.value.substring(0, 20) + (node.value.length > 20 ? '...' : '') : 
+                node.value;
+                
+            const connector = index < nodes.length - 1 ? '↓' : '⏹️';
+            
+            console.log(this.color(`│ ${connector} ${nodeType.padEnd(12)}: ${valuePreview.padEnd(25)} │`, '90'));
+        });
+        
+        console.log(this.color('└───────────────────────────────────────────────┘', '90'));
     }
 }
