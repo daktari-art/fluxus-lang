@@ -5,7 +5,7 @@
   "main": "src/cli.js",
   "type": "module",
   "bin": {
-    "fluxus": "./src/cli.js"
+    "fluxus": "./bin/fluxus.js"
   },
   "scripts": {
     "postinstall": "node install.js",
@@ -25,7 +25,8 @@
     "list-pkgs": "node src/cli.js list",
     "search-pkgs": "node src/cli.js search",
     "exit-help": "node src/exit_helper.js",
-    "coverage": "node --test test-run.js"
+    "coverage": "node --test test-run.js",
+    "fix-global": "node fix-global-final.js"
   },
   "keywords": [
     "reactive-programming",
@@ -48,6 +49,7 @@
   },
   "files": [
     "src",
+    "bin",
     "examples",
     "cli.js",
     "test-run.js",
