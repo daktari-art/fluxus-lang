@@ -35,3 +35,12 @@ yarn-debug.log*
 .idea
 .env
 .env.local
+
+# ------------------------------------
+# 5. DEBUG AND DEVELOPMENT FILES
+# ------------------------------------
+/debug_*.js
+/test_*.js
+*.tmp
+/tmp/
+/scratch/
