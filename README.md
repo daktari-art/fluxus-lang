@@ -47,6 +47,7 @@ let counter = <|> 0
 # 4. Sink: The UI element is a subscriber to the counter pool.
 # This entire line automatically runs every time the 'counter' pool changes.
 counter -> ui_render('#display_div')
+---
 
 ## 🚀 Quick Start
 
