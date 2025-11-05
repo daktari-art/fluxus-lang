@@ -48,12 +48,17 @@ let counter = <|> 0
 # This entire line automatically runs every time the 'counter' pool changes.
 counter -> ui_render('#display_div')
 
-🛠️ Getting Started
- * Installation (Node.js required):
-   npm install -g @fluxus-lang/core
+## 🚀 Quick Start
 
- * Run an example:
-   fluxus run examples/login.flux
+```bash
+# Clone and install
+git clone https://github.com/daktari-art/fluxus-lang.git
+cd fluxus-lang
+npm install
+
+# Run examples (all working!)
+npm run start -- run examples/hello.flux
+npm run start -- run examples/arithmetic.flux
 
 Full documentation is available in the SPECIFICATION.md.
 
