@@ -1,6 +1,6 @@
 // FILENAME: src/core/engine.js
 // 
-// Fluxus Language Runtime Engine - FIXED Array Handling
+// Fluxus Language Runtime Engine v2.0 - Enhanced Error Recovery & Debugging
 
 export class RuntimeEngine {
     constructor() {
@@ -8,6 +8,7 @@ export class RuntimeEngine {
         this.subscriptions = {};
         this.liveStreams = {};
         this.ast = null;
+        this.debugMode = false;
     }
 
     start(ast) {
@@ -22,16 +23,31 @@ export class RuntimeEngine {
     initializePools() {
         for (const poolName in this.ast.pools) {
             const poolDef = this.ast.pools[poolName];
-            this.pools[poolName] = {
-                value: this.parseLiteralValue(poolDef.initial), 
-                subscriptions: new Set()
-            };
+            try {
+                this.pools[poolName] = {
+                    value: this.parseLiteralValue(poolDef.initial), 
+                    subscriptions: new Set(),
+                    history: [this.parseLiteralValue(poolDef.initial)], // Enhanced: Track history
+                    _updates: 0
+                };
+            } catch (error) {
+                console.error(`❌ Failed to initialize pool '${poolName}': ${error.message}`);
+                this.pools[poolName] = {
+                    value: null,
+                    subscriptions: new Set(),
+                    history: [],
+                    _updates: 0,
+                    error: error.message
+                };
+            }
         }
         console.log(`   * Initialized ${Object.keys(this.pools).length} Tidal Pools.`);
     }
     
     linkSubscriptions() {
         console.log(`   * Linking reactive subscriptions...`);
+        let subscriptionCount = 0;
+        
         this.ast.nodes.forEach(node => {
             if (node.value && node.value.includes('->')) {
                 const poolMatch = node.value.match(/(\w+)\s*->/);
@@ -41,10 +57,11 @@ export class RuntimeEngine {
                         this.subscriptions[poolName] = new Set();
                     }
                     this.subscriptions[poolName].add(node.id);
+                    subscriptionCount++;
                 }
             }
         });
-        console.log(`   * Linked ${Object.keys(this.subscriptions).length} subscription(s)`);
+        console.log(`   * Linked ${subscriptionCount} subscription(s)`);
     }
 
     activateLiveStreams() {
@@ -58,11 +75,15 @@ export class RuntimeEngine {
     runFiniteStreams() {
         const finiteSources = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_FINITE');
         finiteSources.forEach(sourceNode => {
-            const rawValue = sourceNode.value.replace(/^~+\s*/, '').trim();
-            const initialData = this.parseLiteralValue(rawValue);
-            const pipelineId = this.findPipelineId(sourceNode.id); 
-            if (pipelineId) {
-                 this.runPipeline(pipelineId, initialData); 
+            try {
+                const rawValue = sourceNode.value.replace(/^~+\s*/, '').trim();
+                const initialData = this.parseLiteralValue(rawValue);
+                const pipelineId = this.findPipelineId(sourceNode.id); 
+                if (pipelineId) {
+                    this.runPipeline(pipelineId, initialData); 
+                }
+            } catch (error) {
+                console.error(`❌ Failed to run stream from node ${sourceNode.id}: ${error.message}`);
             }
         });
     }
@@ -72,20 +93,25 @@ export class RuntimeEngine {
         let currentData = initialData;
         
         while (currentNode) {
-            const connection = this.ast.connections.find(c => c.from === currentNode.id);
-            if (!connection) break;
-            
-            const nextNode = this.ast.nodes.find(n => n.id === connection.to);
-            const processedResult = this.processNode(nextNode, currentData);
-            
-            if (this.isPoolWriteSink(nextNode)) {
-                const poolName = this.extractPoolName(nextNode.value);
-                this.updatePool(poolName, processedResult);
-                return;
+            try {
+                const connection = this.ast.connections.find(c => c.from === currentNode.id);
+                if (!connection) break;
+                
+                const nextNode = this.ast.nodes.find(n => n.id === connection.to);
+                const processedResult = this.processNode(nextNode, currentData);
+                
+                if (this.isPoolWriteSink(nextNode)) {
+                    const poolName = this.extractPoolName(nextNode.value);
+                    this.updatePool(poolName, processedResult);
+                    return;
+                }
+                
+                currentData = processedResult;
+                currentNode = nextNode;
+            } catch (error) {
+                console.error(`❌ Pipeline error at node ${currentNode.id} (${currentNode.name}): ${error.message}`);
+                break;
             }
-            
-            currentData = processedResult;
-            currentNode = nextNode;
         }
     }
     
@@ -114,6 +140,11 @@ export class RuntimeEngine {
     }
     
     processNode(node, inputData) {
+        // Enhanced: Debug logging
+        if (this.debugMode) {
+            console.log(`   🔍 Processing: ${node.name} with input:`, inputData);
+        }
+
         if (node.value && node.value.includes('print(')) {
             const outputValue = typeof inputData === 'object' ? JSON.stringify(inputData) : inputData;
             console.log(`Output: ${outputValue}`);
@@ -123,15 +154,13 @@ export class RuntimeEngine {
         if (['add', 'subtract', 'multiply', 'divide'].includes(node.name)) {
             let result = typeof inputData === 'number' ? inputData : parseFloat(inputData);
             if (isNaN(result)) {
-                console.error(`Runtime Error: Input stream data is not numeric for operator '${node.name}' on line ${node.line}.`);
-                return inputData; 
+                throw new Error(`Input stream data is not numeric for operator '${node.name}'`);
             }
 
             for (const arg of node.args) {
                 const numArg = parseFloat(arg);
                 if (isNaN(numArg)) {
-                    console.error(`Runtime Error: Argument '${arg}' for '${node.name}' must be a number on line ${node.line}.`);
-                    return result; 
+                    throw new Error(`Argument '${arg}' for '${node.name}' must be a number`);
                 }
                 
                 switch (node.name) {
@@ -140,8 +169,7 @@ export class RuntimeEngine {
                     case 'multiply': result *= numArg; break;
                     case 'divide': 
                         if (numArg === 0) {
-                            console.error(`Runtime Error: Division by zero detected on line ${node.line}.`);
-                            return 'ERROR: Division by zero'; 
+                            throw new Error('Division by zero detected');
                         }
                         result /= numArg; 
                         break;
@@ -168,8 +196,7 @@ export class RuntimeEngine {
                     return result.trim().split(/\s+/).length;
                 case 'join':
                     if (!Array.isArray(inputData)) {
-                         console.error(`Runtime Error: 'join' expects an Array input, got ${typeof inputData} on line ${node.line}.`);
-                         return inputData;
+                        throw new Error(`'join' expects an Array input, got ${typeof inputData}`);
                     }
                     const joinSeparator = node.args.length > 0 ? node.args[0].replace(/['"]/g, '') : '';
                     return inputData.join(joinSeparator);
@@ -178,8 +205,7 @@ export class RuntimeEngine {
 
         if (node.name === 'map' || node.name === 'reduce') {
             if (!Array.isArray(inputData)) {
-                console.error(`Runtime Error: '${node.name}' expects an Array input, got ${typeof inputData} on line ${node.line}.`);
-                return inputData;
+                throw new Error(`'${node.name}' expects an Array input, got ${typeof inputData}`);
             }
             const lensValue = node.args[0].replace(/^{|}$/g, '').trim(); 
             if (node.name === 'map') {
@@ -216,23 +242,31 @@ export class RuntimeEngine {
     updatePool(poolName, newValue) {
         if (this.pools[poolName]) {
             this.pools[poolName].value = newValue;
+            this.pools[poolName]._updates = (this.pools[poolName]._updates || 0) + 1;
+            
+            // Enhanced: Maintain history
+            if (this.pools[poolName].history) {
+                this.pools[poolName].history.push(newValue);
+                // Keep only last 10 history entries
+                if (this.pools[poolName].history.length > 10) {
+                    this.pools[poolName].history.shift();
+                }
+            }
+            
             console.log(`   * Updated pool '${poolName}': ${newValue}`);
+        } else {
+            console.error(`❌ Pool '${poolName}' not found for update`);
         }
     }
 
-    /**
-     * FIXED: Improved literal value parser that handles arrays
-     */
     parseLiteralValue(value) {
         // Handle array literals like [1, 2, 3]
         if (value.startsWith('[') && value.endsWith(']')) {
             try {
-                // Convert string array to actual JavaScript array
-                const arrayString = value.replace(/'/g, '"'); // Convert single quotes to double for JSON
+                const arrayString = value.replace(/'/g, '"');
                 return JSON.parse(arrayString);
             } catch (e) {
-                console.error(`Array parsing error: ${e.message}`);
-                return value; // Return as string if parsing fails
+                throw new Error(`Invalid array format: ${e.message}`);
             }
         }
         
@@ -251,5 +285,31 @@ export class RuntimeEngine {
         if (value.startsWith(`"`) && value.endsWith(`"`)) return value.slice(1, -1);
         
         return value;
+    }
+
+    // Enhanced: Debug methods
+    enableDebug() {
+        this.debugMode = true;
+        console.log('🔧 Engine debug mode enabled');
+    }
+
+    disableDebug() {
+        this.debugMode = false;
+        console.log('🔧 Engine debug mode disabled');
+    }
+
+    // Enhanced: Get pool statistics
+    getPoolStats() {
+        const stats = {};
+        Object.keys(this.pools).forEach(poolName => {
+            const pool = this.pools[poolName];
+            stats[poolName] = {
+                value: pool.value,
+                updates: pool._updates || 0,
+                historyLength: pool.history ? pool.history.length : 0,
+                type: Array.isArray(pool.value) ? 'Array' : typeof pool.value
+            };
+        });
+        return stats;
     }
 }
