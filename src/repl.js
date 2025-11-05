@@ -72,13 +72,16 @@ export class FluxusREPL {
         }
 
         if (this.inMultiLine) {
-            this.currentInput += '\n' + input;
+            this.currentInput += ' ' + input; // Use space instead of newline for better parsing
             
             if (this.isMultiLineComplete(this.currentInput)) {
+                console.log(this.color(`🔍 Processing: ${this.currentInput}`, '90')); // Debug
                 this.execute(this.currentInput);
                 this.currentInput = '';
                 this.inMultiLine = false;
                 this.rl.setPrompt('fluxus> ');
+            } else {
+                this.rl.setPrompt('... ');
             }
             this.rl.prompt();
             return;
@@ -119,15 +122,34 @@ export class FluxusREPL {
     }
 
     shouldStartMultiLine(input) {
+        // Check if we have unmatched braces that require continuation
         const openBraces = (input.match(/{/g) || []).length;
         const closeBraces = (input.match(/}/g) || []).length;
-        return openBraces > closeBraces;
+        const openParens = (input.match(/\(/g) || []).length;
+        const closeParens = (input.match(/\)/g) || []).length;
+        const openBrackets = (input.match(/\[/g) || []).length;
+        const closeBrackets = (input.match(/\]/g) || []).length;
+        
+        return (openBraces > closeBraces) || 
+               (openParens > closeParens) || 
+               (openBrackets > closeBrackets) ||
+               input.endsWith('|') || // Pipeline continuation
+               input.endsWith(',') || // Argument list continuation
+               input.endsWith('\\');  // Explicit continuation
     }
 
     isMultiLineComplete(input) {
+        // Check if all braces, parens, and brackets are balanced
         const openBraces = (input.match(/{/g) || []).length;
         const closeBraces = (input.match(/}/g) || []).length;
-        return openBraces === closeBraces;
+        const openParens = (input.match(/\(/g) || []).length;
+        const closeParens = (input.match(/\)/g) || []).length;
+        const openBrackets = (input.match(/\[/g) || []).length;
+        const closeBrackets = (input.match(/\]/g) || []).length;
+        
+        return (openBraces === closeBraces) && 
+               (openParens === closeParens) && 
+               (openBrackets === closeBrackets);
     }
 
     handleCommand(cmd) {
