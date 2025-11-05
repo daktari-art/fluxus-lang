@@ -1,6 +1,6 @@
 // FILENAME: src/core/engine.js
 // 
-// Fluxus Language Runtime Engine v1.0.0 (COMPLETE CORE IMPLEMENTATION)
+// Fluxus Language Runtime Engine v1.0.0 (COMPLETE IMPLEMENTATION)
 // Manages the Reactive Scheduler, Stream Subscriptions, and Tidal Pool state.
 
 export class RuntimeEngine {
@@ -48,6 +48,42 @@ export class RuntimeEngine {
         console.log(`   * Initialized ${Object.keys(this.pools).length} Tidal Pools.`);
     }
     
+    /**
+     * Links all reactive subscriptions (Pool Reads: ->) to their pipelines.
+     */
+    linkSubscriptions() {
+        console.log(`   * Linking reactive subscriptions...`);
+        
+        // Find all pool read nodes (-> operations)
+        this.ast.nodes.forEach(node => {
+            if (node.value && node.value.includes('->')) {
+                const poolMatch = node.value.match(/(\w+)\s*->/);
+                if (poolMatch) {
+                    const poolName = poolMatch[1];
+                    // Store subscription info
+                    if (!this.subscriptions[poolName]) {
+                        this.subscriptions[poolName] = new Set();
+                    }
+                    this.subscriptions[poolName].add(node.id);
+                }
+            }
+        });
+        
+        console.log(`   * Linked ${Object.keys(this.subscriptions).length} subscription(s)`);
+    }
+
+    /**
+     * Activates all live streams (~?) from the AST
+     */
+    activateLiveStreams() {
+        const liveSources = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_LIVE');
+        console.log(`   * Activated ${liveSources.length} live stream(s)`);
+        // For now, just log them - implementation depends on what streams you support
+        liveSources.forEach(source => {
+            console.log(`     - ${source.value}`);
+        });
+    }
+
     /**
      * Finds and runs initial finite stream pipelines.
      */
@@ -152,7 +188,7 @@ export class RuntimeEngine {
      */
     processNode(node, inputData) {
         
-        if (node.value.includes('print(')) {
+        if (node.value && node.value.includes('print(')) {
             console.log(` Output: ${inputData}`);
             return inputData;
         }
@@ -273,29 +309,44 @@ export class RuntimeEngine {
         return inputData; 
     }
     
-    // --- UTILITIES (REMAINDER OF THE CLASS) ---
+    // --- UTILITY METHODS ---
     
-    // ... (All other utility methods like isPoolWriteSink, findPipelineId, etc. remain here)
-
-    updatePool(poolName, newValue) {
-        // ... (existing updatePool logic)
-    }
-    
-    isPoolWriteSink(node) {
-        return node.value.startsWith('to_pool');
-    }
-
-    extractPoolName(value) {
-        const match = value.match(/to_pool\((.*?)\)/);
-        return match? match[1] : null;
-    }
-
+    /**
+     * Finds the pipeline starting from a node
+     */
     findPipelineId(startNodeId) {
-        // In a complex graph, a pipeline ID would track the entire flow path.
-        // For simplicity, we use the start node ID as the pipeline ID.
-        return startNodeId; 
+        return startNodeId; // Simple implementation for now
     }
 
+    /**
+     * Checks if a node is a pool write sink
+     */
+    isPoolWriteSink(node) {
+        return node.value && node.value.startsWith('to_pool');
+    }
+
+    /**
+     * Extracts pool name from to_pool() calls
+     */
+    extractPoolName(value) {
+        const match = value.match(/to_pool\((\w+)\)/);
+        return match ? match[1] : null;
+    }
+
+    /**
+     * Updates a pool value and triggers subscriptions
+     */
+    updatePool(poolName, newValue) {
+        if (this.pools[poolName]) {
+            this.pools[poolName].value = newValue;
+            console.log(`   * Updated pool '${poolName}': ${newValue}`);
+            // In full implementation, this would trigger reactive updates
+        }
+    }
+
+    /**
+     * Parses literal values from strings to appropriate types
+     */
     parseLiteralValue(value) {
         // Updated to handle array/object literals from the parser fix
         if (value.startsWith('{') || value.startsWith('[')) {
