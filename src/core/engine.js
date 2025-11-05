@@ -115,7 +115,8 @@ export class RuntimeEngine {
     
     processNode(node, inputData) {
         if (node.value && node.value.includes('print(')) {
-            console.log(` Output: ${inputData}`);
+            const outputValue = typeof inputData === 'object' ? JSON.stringify(inputData) : inputData;
+            console.log(`Output: ${outputValue}`);
             return inputData;
         }
         
