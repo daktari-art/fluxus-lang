@@ -1,6 +1,6 @@
 // FILENAME: test-run.js
 // 
-// Fluxus Language Comprehensive Test Suite v1.0.0
+// Fluxus Language Comprehensive Test Suite v4.0
 // Executes tests for Stream integrity, N-ary fixes, and reactive flow logic.
 
 const tests = [
@@ -55,7 +55,7 @@ const tests = [
 let passedCount = 0;
 let failedCount = 0;
 
-console.log(`\n🧪 FLUXUS LANGUAGE v1.0.0 TEST SUITE`);
+console.log(`\n🧪 FLUXUS LANGUAGE v4.0 TEST SUITE`);
 console.log(`============================================================`);
 console.log(`Testing Stream Integrity and Asynchronous Flow Concepts`);
 console.log(`============================================================`);

@@ -30,7 +30,7 @@ export class FluxusPackageManager {
         // Create package manifest
         const manifest = {
             name: packageName,
-            version: '1.0.0',
+            version: '4.0.0',
             installed: new Date().toISOString(),
             operators: this.getPackageOperators(packageName),
             description: this.getPackageDescription(packageName)

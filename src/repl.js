@@ -1,5 +1,5 @@
 // FILENAME: src/repl.js
-// Fluxus Language REPL v3.0 - Visual Debugger & Advanced Analytics
+// Fluxus Language REPL v4.0 - Visual Debugger & Advanced Analytics
 
 import readline from 'readline';
 import { GraphParser } from './core/parser.js';
@@ -100,7 +100,7 @@ export class FluxusREPL {
     }
 
     start() {
-        console.log(this.color('🌊 Fluxus Language REPL v3.0', '1;36'));
+        console.log(this.color('🌊 Fluxus Language REPL v4.0', '1;36'));
         console.log('Type Fluxus code to execute. Type "exit" to quit.');
         console.log('Special commands: .help, .clear, .examples, .pools, .debug, .viz, .history\n');
         
@@ -321,7 +321,7 @@ export class FluxusREPL {
                 
             case '.clear':
                 console.clear();
-                console.log(this.color('🌊 Fluxus Language REPL v3.0', '1;36'));
+                console.log(this.color('🌊 Fluxus Language REPL v4.0', '1;36'));
                 break;
                 
             case '.examples':

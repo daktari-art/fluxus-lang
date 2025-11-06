@@ -1,4 +1,4 @@
-# Fluxus Language Specification v1.0
+# Fluxus Language Specification v4.0
 
 ## 🎯 Core Philosophy: Stream-Centric Execution
 

@@ -1,6 +1,6 @@
 // FILENAME: src/core/compiler.js
 // 
-// Fluxus Language Compiler v1.0.0
+// Fluxus Language Compiler v4.0
 // Performs Type Checking, Linker resolution, and Optimization on the AST.
 
 export class Compiler {
@@ -61,7 +61,7 @@ export class Compiler {
     link(ast) {
         console.log(`   * Resolving pool and function links...`);
         // The core link logic (connecting Pool Reads '->' to the subscribed pipeline)
-        // is deferred to the RuntimeEngine's linkSubscriptions method for v1.0.0 simplicity.
+        // is deferred to the RuntimeEngine's linkSubscriptions method for v4.0 simplicity.
         return ast;
     }
 
@@ -83,7 +83,7 @@ export class Compiler {
                     // NOTE: Full type checking would look up the output type of the
                     // 'fromNode' and validate it against 'signature.input'.
                     
-                    // For v1.0.0, we just ensure the function signature exists.
+                    // For v4.0, we just ensure the function signature exists.
                 } else {
                      // Log a warning for unknown operators
                      console.warn(`   ⚠️ Type Warning on line ${toNode.line}: Operator '${funcName}' is not defined in the standard library. Skipping type check.`);

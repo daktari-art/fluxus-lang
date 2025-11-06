@@ -1,6 +1,6 @@
 {
   "name": "@fluxus-lang/core",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "description": "Reactive Stream Programming Language - Where Time and Data are Unified in a non-blocking flow.",
   "main": "src/cli.js",
   "type": "module",

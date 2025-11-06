@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen)](https://github.com/fluxus-lang/fluxus-lang)
+[![Version](https://img.shields.io/badge/version-4.0.0-brightgreen)](https://github.com/fluxus-lang/fluxus-lang)
 [![Fluxus CI Status](https://github.com/daktari-art/fluxus-lang/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daktari-art/fluxus-lang/actions/workflows/ci.yml)
 
 Fluxus is a revolutionary data flow language built on the principle of **Reactive Programming**. Instead of writing sequential code, you define relationships between streams of data. When one piece of data changes, the entire system **reacts** automatically.

@@ -1,4 +1,4 @@
-# 🚀 Getting Started with Fluxus Language v1.0
+# 🚀 Getting Started with Fluxus Language v4.0
 
 This guide is designed to get you writing non-blocking, reactive programs immediately. Fluxus is simple: **everything is a stream that either ends or lives forever.**
 
@@ -10,7 +10,7 @@ npm install -g @fluxus-lang/core
 
 # Verify installation
 fluxus --version
-# Output: 🌊 Fluxus Language v1.0.0
+# Output: 🌊 Fluxus Language v4.0.0
 
 Day 1: Streams and Pipes (The Data Flow)
 On Day 1, you learn the ~ (Source), | (Pipe), and {} (Lens) symbols.

@@ -1,6 +1,6 @@
 // FILENAME: src/core/engine.js
 // 
-// Fluxus Language Runtime Engine v2.0 - Enhanced Error Recovery & Debugging
+// Fluxus Language Runtime Engine v4.0 - Enhanced Error Recovery & Debugging
 
 export class RuntimeEngine {
     constructor() {
@@ -254,6 +254,23 @@ export class RuntimeEngine {
             }
             
             console.log(`   * Updated pool '${poolName}': ${newValue}`);
+
+            // Trigger reactive subscriptions
+            if (this.subscriptions[poolName]) {
+                this.subscriptions[poolName].forEach(nodeId => {
+                    const subscriptionNode = this.ast.nodes.find(n => n.id === nodeId);
+                    if (subscriptionNode && subscriptionNode.type === 'POOL_READ') {
+                        const connection = this.ast.connections.find(c => c.from === nodeId);
+                        if (connection) {
+                            const nextNode = this.ast.nodes.find(n => n.id === connection.to);
+                            if (nextNode) {
+                                const poolValue = this.pools[poolName].value;
+                                this.runPipeline(nodeId, poolValue);
+                            }
+                        }
+                    }
+                });
+            }
         } else {
             console.error(`❌ Pool '${poolName}' not found for update`);
         }

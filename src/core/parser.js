@@ -1,6 +1,6 @@
 // FILENAME: src/core/parser.js
 // 
-// Fluxus Language Graph Parser - FIXED Stream Source Node Creation
+// Fluxus Language Graph Parser v4.0 - FIXED Pool Subscriptions
 
 const generateUUID = () => `node_${Math.random().toString(36).substring(2, 9)}`; 
 
@@ -43,6 +43,12 @@ export class GraphParser {
             // Handle pool declarations
             if (line.includes('<|>')) {
                 this.parsePoolDeclaration(line, lineNum + 1, ast);
+                continue;
+            }
+
+            // Handle pool subscriptions (lines with -> but not starting with ~ or |)
+            if (line.includes('->') && !line.startsWith('~') && !line.startsWith('|')) {
+                this.parsePoolSubscription(line, lineNum + 1, ast);
                 continue;
             }
 
@@ -95,6 +101,43 @@ export class GraphParser {
         }
 
         return ast;
+    }
+
+    /**
+     * Parse pool subscription lines like: counter -> print()
+     */
+    parsePoolSubscription(line, lineNum, ast) {
+        const parts = line.split('->').map(p => p.trim());
+        if (parts.length !== 2) return;
+
+        const poolName = parts[0];
+        const operation = parts[1];
+
+        // Create pool read node
+        const poolReadNode = {
+            id: generateUUID(),
+            type: 'POOL_READ',
+            name: 'POOL_READ',
+            value: `${poolName} ->`,
+            args: [poolName],
+            line: lineNum
+        };
+        ast.nodes.push(poolReadNode);
+
+        // Parse the operation after ->
+        const operationNode = this.parseNode(operation, lineNum);
+        if (operationNode) {
+            ast.nodes.push(operationNode);
+            
+            // Connect pool read to operation
+            ast.connections.push({
+                id: generateUUID(),
+                type: 'POOL_READ_FLOW',
+                from: poolReadNode.id,
+                to: operationNode.id,
+                line: lineNum
+            });
+        }
     }
 
     /**
@@ -387,6 +430,7 @@ export class GraphParser {
         if (value.startsWith('~')) return 'STREAM_SOURCE_FINITE';
         if (value.match(/^\w+_LENS\(.*\)$/)) return 'FUNCTION_OPERATOR';
         if (value.match(/^\w+\(.*\)$/)) return 'FUNCTION_OPERATOR';
+        if (value.endsWith(' ->')) return 'POOL_READ'; // NEW: Detect pool subscriptions
         if (value.match(/^['"].*['"]$/)) return 'LITERAL_STRING';
         if (value.startsWith('[') && value.endsWith(']')) return 'LITERAL_COLLECTION';
         if (value.startsWith('{') && value.endsWith('}')) return 'LITERAL_COLLECTION';
