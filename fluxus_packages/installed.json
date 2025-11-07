@@ -10,6 +10,17 @@
         "http_request"
       ],
       "description": "HTTP client and server operations for network communication"
+    },
+    "sensors-mock": {
+      "name": "sensors-mock",
+      "version": "1.0.0",
+      "installed": "2025-11-05T18:49:45.513Z",
+      "operators": [
+        "accelerometer",
+        "gps",
+        "proximity"
+      ],
+      "description": "Mock sensor streams for development"
     }
   }
 }

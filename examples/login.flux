@@ -16,6 +16,9 @@ let auth_state = <|> { status: 'logged_out', user: null, token: null, error: nul
 
 # === 3. HELPER POOLS: Live Form Data ===
 # Stores the current value of input fields as the user types.
+# FIX: Explicitly declare helper pools for the parser to find them.
+let username_pool = <|> "" 
+let password_pool = <|> ""
 ~? ui_events('input#username', 'value') | to_pool(username_pool) 
 ~? ui_events('input#password', 'value') | to_pool(password_pool) 
 
@@ -66,7 +69,10 @@ let auth_state = <|> { status: 'logged_out', user: null, token: null, error: nul
 | to_pool(auth_state) # Commit the error state
 
 
-# === 7. REACTIVE SINK: UI and Console Output ===
-# These flows subscribe permanently to 'auth_state' and re-run on every change.
-auth_state -> ui_render('#auth_container') 
+# === 7. THE REACTIVE SINKS (Subscriptions) ===
+# These runs when the 'auth_state' pool changes (on program start, success, or failure)
+# 7a. UI Rendering (Renders the new state)
+auth_state -> ui_render('#display_div')
+
+# 7b. Console Log (Prints the new state to terminal)
 auth_state -> print('Auth Status Updated: ' | concat(.status))

@@ -1,0 +1,7 @@
+{
+  "name": "sensors-real",
+  "version": "1.0.0",
+  "type": "stream-source",
+  "operators": ["accelerometer", "gps", "proximity"],
+  "description": "Real mobile sensor streams for Termux"
+}

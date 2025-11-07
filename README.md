@@ -63,3 +63,51 @@ npm run start -- run examples/arithmetic.flux
 
 Full documentation is available in the SPECIFICATION.md.
 
+### 📦 Package System
+
+Fluxus supports modular packages that extend the language with new stream sources, transformations, and sinks. Packages live in `fluxus_packages/` and follow a standard operator contract:
+
+```javascript
+export const FLUXUS_OPERATORS = {
+  operator_name: {
+    type: 'stream-source' | 'transformation' | 'sink',
+    implementation: (inputData, args) => { /* ... */ },
+    description: 'Operator description',
+    inputType: 'Any',
+    outputType: 'Any'
+  }
+};
+```
+
+You can build packages for HTTP, sensors, MQTT, analytics, and more. The engine automatically detects and loads installed packages.
+
+---
+
+### 🧠 Tooling
+
+Fluxus includes advanced tooling to support development and debugging:
+
+- **REPL**: Interactive stream programming with live feedback
+- **Dashboard**: Visualize stream graphs and pool states
+- **Profiler**: Monitor performance and bottlenecks
+- **Tutorial System**: Learn Fluxus through guided examples
+
+---
+
+### 📈 Roadmap Highlights
+
+Fluxus is evolving rapidly. Key milestones include:
+
+- ✅ Real sensor integration via Termux APIs
+- ✅ HTTP and MQTT operators
+- 🔜 Health tracker and IoT monitor demos
+- 🔜 Temporal stream queries and causal debugging
+- 🔜 Distributed topology support (mobile → edge → cloud)
+
+See `docs/spec.md` for the full implementation strategy.
+
+---
+
+### 🤝 Contributing
+
+We welcome contributions! See `CONTRIBUTING.md` and `DEVELOPER.md` to get started. Whether you're building packages, improving the engine, or writing examples—your input matters.

@@ -3,7 +3,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,6 +11,7 @@ export class FluxusPackageManager {
     constructor() {
         this.packagesDir = path.join(process.cwd(), 'fluxus_packages');
         this.installedPackages = new Map();
+        this.loadedOperators = new Map(); // Cache for loaded operator functions
         this.loadInstalledPackages();
     }
 
@@ -258,4 +259,65 @@ function getOperatorDescription(operator) {
         });
         return operators;
     }
+    /**
+     * Retrieves an operator implementation from an installed package.
+     * This method is asynchronous because it may need to dynamically import the package file.
+     * @param {string} operatorName 
+     * @returns {object | null} The operator object with its implementation, or null.
+     */
+    async getOperator(operatorName) {
+        if (this.loadedOperators.has(operatorName)) {
+            return this.loadedOperators.get(operatorName);
+        }
+        
+        // Search through all installed packages to find the operator
+        for (const [packageName, manifest] of this.installedPackages.entries()) {
+            if (manifest.operators && manifest.operators.includes(operatorName)) {
+                // Package contains the operator, now load its code
+                await this.loadPackageImplementation(packageName);
+                // After loading, the operator should be in the map
+                return this.loadedOperators.get(operatorName) || null;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Dynamically loads all operators from a package's index.js file.
+     * @param {string} packageName 
+     */
+    async loadPackageImplementation(packageName) {
+        // Prevent double loading
+        if (this.loadedPackages && this.loadedPackages.has(packageName)) {
+            return;
+        }
+
+        const packageIndexPath = path.join(this.packagesDir, packageName, 'index.js');
+        if (fs.existsSync(packageIndexPath)) {
+            try {
+                // Use dynamic import with file URL path for reliable loading in ES Modules
+                const packageUrl = pathToFileURL(packageIndexPath).href;
+                const module = await import(packageUrl);
+                
+                // Expects the file to export FLUXUS_OPERATORS or HTTP_OPERATORS (using OR for flexibility)
+                const ops = module.FLUXUS_OPERATORS || module.HTTP_OPERATORS; 
+                
+                for (const [opName, opDef] of Object.entries(ops)) {
+                    this.loadedOperators.set(opName, opDef);
+                }
+                
+                if (!this.loadedPackages) {
+                    this.loadedPackages = new Set();
+                }
+                this.loadedPackages.add(packageName);
+                
+                console.log(`   📦 Package loaded: ${packageName} (${Object.keys(ops).length} ops)`);
+                
+            } catch (error) {
+                console.error(`❌ Failed to dynamically load package '${packageName}': ${error.message}`);
+            }
+        }
+    }
+
 }

@@ -1,0 +1,7 @@
+{
+  "name": "sensors-mock",
+  "version": "1.0.0",
+  "type": "module",
+  "operators": ["accelerometer", "gps", "proximity"],
+  "description": "Mock sensor streams for development"
+}

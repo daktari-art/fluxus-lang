@@ -1,6 +1,6 @@
 // FILENAME: src/core/parser.js
 // 
-// Fluxus Language Graph Parser v4.0 - FIXED Pool Subscriptions
+// Fluxus Language Graph Parser v4.0 - FINAL VERIFIED CODE (Fixes: Pool Subscriptions & Split Flow)
 
 const generateUUID = () => `node_${Math.random().toString(36).substring(2, 9)}`; 
 
@@ -8,8 +8,8 @@ export class GraphParser {
     constructor() {
         this.connectionTypes = {
             '|': 'PIPE_FLOW', 
-            '->': 'POOL_READ_FLOW',
-            '<-': 'POOL_WRITE_FLOW'
+            '->': 'POOL_READ_FLOW', // Pool Subscription
+            '<-': 'POOL_WRITE_FLOW' // Not used in v4.0 but kept for future
         };
     }
 
@@ -18,385 +18,322 @@ export class GraphParser {
             nodes: [],
             connections: [],
             pools: {},
-            functions: {}
+            functions: {},
+            liveStreams: [], // New list for ~? streams
+            finiteStreams: [], // New list for ~ streams
         };
 
-        // Remove ALL comments first
+        // 1. Pre-process: Remove comments and empty lines
         const cleanedLines = sourceCode
             .split('\n')
-            .map(line => {
+            .map((line, index) => {
                 const commentIndex = line.indexOf('#');
-                if (commentIndex !== -1) {
-                    return line.substring(0, commentIndex).trim();
+                let cleanLine = (commentIndex !== -1) ? line.substring(0, commentIndex).trim() : line.trim();
+                
+                // Add the original line number to track errors
+                if (cleanLine.length > 0) {
+                    return { line: cleanLine, lineNum: index + 1 };
                 }
-                return line.trim();
+                return null;
             })
-            .filter(line => line.length > 0);
+            .filter(item => item !== null);
 
         let currentPipelineId = null;
         let previousNodeId = null;
 
-        for (let lineNum = 0; lineNum < cleanedLines.length; lineNum++) {
-            const line = cleanedLines[lineNum];
-            if (!line) continue;
+        for (const item of cleanedLines) {
+            const { line, lineNum } = item;
 
-            // Handle pool declarations
+            // Handle Flow Imports (e.g., FLOW http)
+            if (line.startsWith('FLOW')) {
+                 // FLOW is currently ignored by the parser but is necessary for imports
+                 continue;
+            }
+
+            // 1. Handle pool declarations (e.g., let count = <|> 0)
             if (line.includes('<|>')) {
-                this.parsePoolDeclaration(line, lineNum + 1, ast);
+                this.parsePoolDeclaration(line, lineNum, ast);
                 continue;
             }
 
-            // Handle pool subscriptions (lines with -> but not starting with ~ or |)
-            if (line.includes('->') && !line.startsWith('~') && !line.startsWith('|')) {
-                this.parsePoolSubscription(line, lineNum + 1, ast);
+            // 2. Handle Pool Subscriptions (e.g., my_pool -> print())
+            // Pool subscriptions start a flow with a pool read (e.g., 'pool_name -> ...').
+            // CRITICAL FIX: The line MUST NOT start with a pipeline symbol (|, ~) 
+            // to prevent misinterpreting a lens block like '| map { data -> {} }' as a subscription.
+            if (line.includes('->') && 
+                !line.startsWith('~') &&
+                !line.startsWith('|') &&
+                !line.startsWith('TRUE_FLOW') &&
+                !line.startsWith('FALSE_FLOW')
+            ) {
+                this.parseSubscription(line, lineNum, ast);
                 continue;
             }
-
-            // Handle new stream sources - start a new pipeline
-            if (line.startsWith('~')) {
-                const result = this.parseStreamPipeline(line, lineNum + 1, ast);
-                currentPipelineId = result.pipelineId;
-                previousNodeId = result.lastNodeId;
-                continue;
-            }
-
-            // Handle pipeline continuations (lines starting with |)
-            if (line.startsWith('|') && previousNodeId) {
-                previousNodeId = this.parsePipelineContinuation(line, lineNum + 1, previousNodeId, ast);
-                continue;
-            }
-
-            // Handle other lines (like variable assignments, etc.)
-            const tokens = this.tokenizeLine(line);
-            if (tokens.length === 0) continue;
-
-            let currentConnection = null;
             
-            for (let i = 0; i < tokens.length; i++) {
-                const token = tokens[i];
+            // 3. Handle Stream Pipeline continuation or start
+            
+            // Check for new stream start or pipe continuation
+            if (line.startsWith('~') || line.startsWith('|') || line.startsWith('TRUE_FLOW') || line.startsWith('FALSE_FLOW')) {
                 
-                if (this.connectionTypes[token]) {
-                    currentConnection = token;
-                    continue;
+                // Get the elements of the line
+                const parts = line.split('|').map(p => p.trim()).filter(p => p.length > 0);
+                
+                // If the line starts a new stream (i.e., not starting with |)
+                if (line.startsWith('~')) {
+                    // Reset pipeline for a new stream
+                    currentPipelineId = generateUUID();
+                    previousNodeId = null;
+                } 
+                // If it starts with TRUE/FALSE_FLOW, it's a split continuation
+                else if (line.startsWith('TRUE_FLOW') || line.startsWith('FALSE_FLOW')) {
+                    // This node is a special connector and doesn't reset the pipeline ID
+                    // It should not occur at the start of a line without a preceding pipe in the source code
+                    throw new Error(`❌ Syntax Error on line ${lineNum}: TRUE_FLOW/FALSE_FLOW must be piped (|) from a split operator.`);
+                } 
+                // If it's a pipe continuation, keep the current pipelineId and previousNodeId
+                else if (line.startsWith('|')) {
+                    // Check if there's an active pipeline. 
+                    // Allow | TRUE_FLOW / | FALSE_FLOW to implicitly 'restart' the pipeline ID
+                    // if the previous branch terminated it. This is a hack for sequential parsing.
+                    if (!currentPipelineId) {
+                        const isSplitContinuation = parts[0].startsWith('TRUE_FLOW') || parts[0].startsWith('FALSE_FLOW');
+                        if (isSplitContinuation) {
+                            // Assign a new ID for the new branch. The runtime must link this back to the split manually.
+                            currentPipelineId = generateUUID();
+                            previousNodeId = null; // Clear previous node ID
+                        } else {
+                            throw new Error(`❌ Syntax Error on line ${lineNum}: Pipe (|) used without a preceding stream source (~ or ~?).`);
+                        }
+                    }
+                    // The first part of a continuation pipe is the operator
                 }
 
-                const newNode = this.parseNode(token, lineNum + 1);
-                if (newNode) {
-                    ast.nodes.push(newNode);
-
-                    if (currentConnection && previousNodeId) {
-                        ast.connections.push({
+                // Process all parts (operators/sources) in the line
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    
+                    if (part.startsWith('~')) {
+                        // Source node (~ or ~?)
+                        const isLive = part.startsWith('~?');
+                        const valuePart = part.substring(isLive ? 2 : 1).trim();
+                        
+                        const sourceNode = {
                             id: generateUUID(),
-                            type: this.connectionTypes[currentConnection],
-                            from: previousNodeId,
-                            to: newNode.id,
-                            line: lineNum + 1
-                        });
-                    }
+                            pipelineId: currentPipelineId,
+                            type: isLive ? 'STREAM_SOURCE_LIVE' : 'STREAM_SOURCE_FINITE',
+                            value: valuePart,
+                            line: lineNum,
+                            isTerminal: false,
+                        };
+                        ast.nodes.push(sourceNode);
+                        previousNodeId = sourceNode.id;
 
-                    previousNodeId = newNode.id;
-                    currentConnection = null;
+                        if (isLive) {
+                            ast.liveStreams.push(sourceNode.id);
+                        } else {
+                            ast.finiteStreams.push(sourceNode.id);
+                        }
+
+                    } else if (part.startsWith('TRUE_FLOW') || part.startsWith('FALSE_FLOW')) {
+                        // Split flow continuation node
+                        const type = part.startsWith('TRUE_FLOW') ? 'TRUE_FLOW' : 'FALSE_FLOW';
+                        
+                        const flowNode = {
+                            id: generateUUID(),
+                            pipelineId: currentPipelineId, // IMPORTANT: Inherit from split node
+                            type: type,
+                            value: null,
+                            line: lineNum,
+                            isTerminal: false,
+                        };
+                        ast.nodes.push(flowNode);
+
+                        // Connect this flow node to the previous pipe's node (which should be the split)
+                        if (previousNodeId) {
+                            ast.connections.push({
+                                from: previousNodeId,
+                                to: flowNode.id,
+                                type: this.connectionTypes['|'],
+                                line: lineNum
+                            });
+                        }
+                        
+                        previousNodeId = flowNode.id;
+
+                    } else if (part.length > 0) {
+                        // Operator node (e.g., map {...} or add(5))
+                        const operatorNode = this.parseOperator(part, lineNum, currentPipelineId);
+                        ast.nodes.push(operatorNode);
+
+                        // Connect the new node to the previous node
+                        if (previousNodeId) {
+                            ast.connections.push({
+                                from: previousNodeId,
+                                to: operatorNode.id,
+                                type: this.connectionTypes['|'],
+                                line: lineNum
+                            });
+                        }
+                        
+                        previousNodeId = operatorNode.id;
+                        
+                        // Check for terminal operator
+                        if (operatorNode.name === 'to_pool' || operatorNode.name === 'print') {
+                            operatorNode.isTerminal = true;
+                            // The sequential parser will now not crash when encountering the next branch.
+                        }
+                    }
                 }
             }
         }
-
+        
         return ast;
     }
 
-    /**
-     * Parse pool subscription lines like: counter -> print()
-     */
-    parsePoolSubscription(line, lineNum, ast) {
+    // Parses a pool subscription flow (e.g., pool -> map {..} | to_pool(...))
+    parseSubscription(line, lineNum, ast) {
+        // Example: click_count -> ui_render('#display_div')
         const parts = line.split('->').map(p => p.trim());
-        if (parts.length !== 2) return;
+        const poolName = parts[0].trim();
+        
+        if (!ast.pools[poolName]) {
+            // Log warning, but allow subscription to be linked in runtime
+            console.warn(`⚠️ Warning: Subscription on line ${lineNum} uses pool '${poolName}' which is not declared.`);
+        }
 
-        const poolName = parts[0];
-        const operation = parts[1];
+        const subscriptionFlow = parts[1].trim(); // Everything after the first '->'
+        
+        // Treat the pool subscription as the start of a new, special pipeline
+        const pipelineId = generateUUID();
 
-        // Create pool read node
+        // 1. Create the POOL_READ node
         const poolReadNode = {
             id: generateUUID(),
+            pipelineId: pipelineId,
             type: 'POOL_READ',
-            name: 'POOL_READ',
-            value: `${poolName} ->`,
-            args: [poolName],
-            line: lineNum
+            value: poolName,
+            line: lineNum,
+            isTerminal: false,
         };
         ast.nodes.push(poolReadNode);
+        
+        let previousNodeId = poolReadNode.id;
 
-        // Parse the operation after ->
-        const operationNode = this.parseNode(operation, lineNum);
-        if (operationNode) {
-            ast.nodes.push(operationNode);
-            
-            // Connect pool read to operation
+        // 2. Parse the rest of the flow (e.g., ui_render('#display_div'))
+        const flowParts = subscriptionFlow.split('|').map(p => p.trim()).filter(p => p.length > 0);
+
+        for (const part of flowParts) {
+            const operatorNode = this.parseOperator(part, lineNum, pipelineId);
+            ast.nodes.push(operatorNode);
+
+            // Connect the new node to the previous node
             ast.connections.push({
-                id: generateUUID(),
-                type: 'POOL_READ_FLOW',
-                from: poolReadNode.id,
-                to: operationNode.id,
+                from: previousNodeId,
+                to: operatorNode.id,
+                type: this.connectionTypes['|'],
                 line: lineNum
             });
-        }
-    }
-
-    /**
-     * Parse entire stream pipelines including pipes
-     * Returns: { pipelineId, lastNodeId }
-     */
-    parseStreamPipeline(line, lineNum, ast) {
-        const pipelineContent = line.substring(1).trim();
-        const processedContent = this.preprocessMapReduce(pipelineContent);
-        const tokens = this.tokenizeLine(processedContent);
-        
-        if (tokens.length === 0) return { pipelineId: null, lastNodeId: null };
-
-        let pipelineId = null;
-        let lastNodeId = null;
-        let currentConnection = null;
-
-        for (let i = 0; i < tokens.length; i++) {
-            const token = tokens[i];
             
-            if (this.connectionTypes[token]) {
-                currentConnection = token;
-                continue;
-            }
-
-            const newNode = this.parseNode(token, lineNum);
-            if (newNode) {
-                ast.nodes.push(newNode);
-
-                if (i === 0) {
-                    // First token is the stream source - create as STREAM_SOURCE_FINITE
-                    const streamNode = {
-                        id: newNode.id, // Use same ID
-                        type: 'STREAM_SOURCE_FINITE',
-                        name: 'STREAM_SOURCE_FINITE',
-                        value: newNode.value, // The actual data
-                        args: [],
-                        line: lineNum
-                    };
-                    // Replace the node in the array
-                    const nodeIndex = ast.nodes.findIndex(n => n.id === newNode.id);
-                    ast.nodes[nodeIndex] = streamNode;
-                    pipelineId = streamNode.id;
-                    lastNodeId = streamNode.id;
-                } else if (currentConnection && lastNodeId) {
-                    // Connect to previous node in pipeline
-                    ast.connections.push({
-                        id: generateUUID(),
-                        type: this.connectionTypes[currentConnection],
-                        from: lastNodeId,
-                        to: newNode.id,
-                        line: lineNum
-                    });
-                    lastNodeId = newNode.id;
-                }
-
-                currentConnection = null;
-            }
-        }
-
-        return { pipelineId, lastNodeId };
-    }
-
-    /**
-     * Parse pipeline continuation lines (lines starting with |)
-     */
-    parsePipelineContinuation(line, lineNum, previousNodeId, ast) {
-        const pipelineContent = line.substring(1).trim();
-        const processedContent = this.preprocessMapReduce(pipelineContent);
-        const tokens = this.tokenizeLine(processedContent);
-        
-        if (tokens.length === 0) return previousNodeId;
-
-        let currentConnection = '|';
-        let lastNodeId = previousNodeId;
-
-        for (let i = 0; i < tokens.length; i++) {
-            const token = tokens[i];
+            previousNodeId = operatorNode.id;
             
-            if (this.connectionTypes[token]) {
-                currentConnection = token;
-                continue;
-            }
-
-            const newNode = this.parseNode(token, lineNum);
-            if (newNode) {
-                ast.nodes.push(newNode);
-
-                if (currentConnection && lastNodeId) {
-                    ast.connections.push({
-                        id: generateUUID(),
-                        type: this.connectionTypes[currentConnection],
-                        from: lastNodeId,
-                        to: newNode.id,
-                        line: lineNum
-                    });
-                }
-
-                lastNodeId = newNode.id;
-                currentConnection = null;
+            // Check for terminal operator
+            if (operatorNode.name === 'to_pool' || operatorNode.name === 'print') {
+                operatorNode.isTerminal = true;
             }
         }
-
-        return lastNodeId;
-    }
-
-    /**
-     * PREPROCESS: Convert map/reduce with lenses into function calls
-     */
-    preprocessMapReduce(content) {
-        content = content.replace(/(map|reduce)\s*\{([^}]+)\}/g, (match, operator, lens) => {
-            return `${operator}_LENS(${lens.trim()})`;
+        
+        // Add a special subscription connection
+        ast.connections.push({
+            from: poolReadNode.id,
+            to: previousNodeId, // Connects to the last node in the flow
+            type: this.connectionTypes['->'],
+            line: lineNum
         });
-        return content;
     }
 
-    tokenizeLine(line) {
-        const tokens = [];
-        let current = '';
-        let inString = false;
-        let inBrace = 0;
-        let inParen = 0;
-        let inBracket = 0;
-        let stringChar = '';
 
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if ((char === '"' || char === "'") && !inString) {
-                inString = true;
-                stringChar = char;
-                current += char;
-            } else if (inString && char === stringChar) {
-                inString = false;
-                current += char;
-                tokens.push(current);
-                current = '';
-            } else if (inString) {
-                current += char;
-            }
-            else if (char === '{') {
-                inBrace++;
-                current += char;
-            } else if (char === '}') {
-                inBrace--;
-                current += char;
-                if (inBrace === 0) {
-                    tokens.push(current);
-                    current = '';
-                }
-            }
-            else if (char === '[') {
-                inBracket++;
-                current += char;
-            } else if (char === ']') {
-                inBracket--;
-                current += char;
-                if (inBracket === 0) {
-                    tokens.push(current);
-                    current = '';
-                }
-            }
-            else if (char === '(') {
-                inParen++;
-                current += char;
-            } else if (char === ')') {
-                inParen--;
-                current += char;
-                if (inParen === 0) {
-                    tokens.push(current);
-                    current = '';
-                }
-            }
-            else if ((char === '|' || char === '-' || char === '<') && inBrace === 0 && inParen === 0 && inBracket === 0) {
-                if (current.trim()) {
-                    tokens.push(current.trim());
-                    current = '';
-                }
-                if (char === '-' && nextChar === '>') {
-                    tokens.push('->');
-                    i++;
-                } else if (char === '<' && nextChar === '-') {
-                    tokens.push('<-');
-                    i++;
-                } else if (char === '|') {
-                    tokens.push('|');
-                }
-            }
-            else if (char === ' ' && inBrace === 0 && inParen === 0 && inBracket === 0) {
-                if (current.trim()) {
-                    tokens.push(current.trim());
-                    current = '';
-                }
-            } else {
-                current += char;
-            }
-        }
-
-        if (current.trim()) {
-            tokens.push(current.trim());
-        }
-
-        return tokens;
-    }
-
-    parseNode(token, lineNum) {
-        if (!token || token === '#' || token.startsWith('#')) {
-            return null;
-        }
-
-        let type = this.determineNodeType(token);
-        let name = type;
-        let value = token;
+    parseOperator(part, lineNum, pipelineId) {
+        // Examples: add(5), map { .value | add(1) }
+        
+        let name = part;
         let args = [];
+        let type = 'FUNCTION_OPERATOR';
+        
+        const openParen = part.indexOf('(');
+        const closeParen = part.lastIndexOf(')');
 
-        if (type === 'FUNCTION_OPERATOR') {
-            const match = token.match(/^(\w+)_LENS\((.*)\)$/);
-            if (match) {
-                name = match[1];
-                const lensContent = match[2];
-                args = [lensContent];
-                value = `${name} {${lensContent}}`;
-            } else {
-                const standardMatch = token.match(/^(\w+)\((.*)\)$/);
-                if (standardMatch) {
-                    name = standardMatch[1];
-                    const argsString = standardMatch[2];
-                    args = this.splitArgs(argsString);
-                }
+        const openBrace = part.indexOf('{');
+        const closeBrace = part.lastIndexOf('}');
+        
+        // Handle Map/Filter/Reduce (Lens operators)
+        if (openBrace !== -1 && closeBrace !== -1 && openBrace < closeBrace) {
+            const lensContent = part.substring(openBrace + 1, closeBrace).trim();
+            name = part.substring(0, openBrace).trim(); // e.g., 'map'
+            args = [lensContent];
+            type = 'LENS_OPERATOR'; // Custom type for Map/Filter/Reduce logic
+        }
+        // Handle Standard Function Operators (e.g., add(5, 10))
+        else if (openParen !== -1 && closeParen !== -1 && openParen < closeParen) {
+            name = part.substring(0, openParen).trim();
+            const argString = part.substring(openParen + 1, closeParen).trim();
+            
+            if (argString) {
+                args = this.parseArgs(argString);
             }
+        }
+        // Handle TRUE_FLOW/FALSE_FLOW
+        else if (part === 'TRUE_FLOW' || part === 'FALSE_FLOW') {
+            name = part;
+            type = 'FLOW_BRANCH';
+            args = [];
+        }
+        // Handle Operator without args (e.g., print)
+        else {
+            name = part.trim();
         }
 
         return {
             id: generateUUID(),
-            type,
-            name,
-            value,
-            args,
-            line: lineNum
+            pipelineId: pipelineId,
+            type: type,
+            name: name,
+            args: args,
+            value: part, // Store the original text for debugging/compilation
+            line: lineNum,
+            isTerminal: false,
         };
     }
 
-    splitArgs(argsString) {
-        if (!argsString.trim()) return [];
-        
+    // Simple arg parser that handles basic literals and strings
+    parseArgs(argString) {
         const args = [];
         let current = '';
-        let depth = 0;
+        let braceDepth = 0; // {}
+        let parenDepth = 0; // ()
+        let quote = null; // Single or double quote
 
-        for (let i = 0; i < argsString.length; i++) {
-            const char = argsString[i];
-            
-            if (char === '(' || char === '[' || char === '{') depth++;
-            else if (char === ')' || char === ']' || char === '}') depth--;
-            else if (char === ',' && depth === 0) {
-                args.push(current.trim());
+        for (let i = 0; i < argString.length; i++) {
+            const char = argString[i];
+
+            if (char === ',' && braceDepth === 0 && parenDepth === 0 && quote === null) {
+                if (current.trim()) {
+                    args.push(current.trim());
+                }
                 current = '';
                 continue;
+            }
+
+            if (char === '{' && quote === null) braceDepth++;
+            if (char === '}' && quote === null) braceDepth--;
+            if (char === '(' && quote === null) parenDepth++;
+            if (char === ')' && quote === null) parenDepth--;
+
+            if (char === '\'' || char === '"') {
+                if (quote === char) {
+                    quote = null;
+                } else if (quote === null) {
+                    quote = char;
+                }
             }
             
             current += char;
@@ -422,21 +359,8 @@ export class GraphParser {
                 line: lineNum,
                 value: null
             };
+        } else {
+             throw new Error(`❌ Syntax Error on line ${lineNum}: Invalid pool declaration format. Expected 'let name = <|> initial_value'.`);
         }
-    }
-
-    determineNodeType(value) {
-        if (value.startsWith('~?')) return 'STREAM_SOURCE_LIVE';
-        if (value.startsWith('~')) return 'STREAM_SOURCE_FINITE';
-        if (value.match(/^\w+_LENS\(.*\)$/)) return 'FUNCTION_OPERATOR';
-        if (value.match(/^\w+\(.*\)$/)) return 'FUNCTION_OPERATOR';
-        if (value.endsWith(' ->')) return 'POOL_READ'; // NEW: Detect pool subscriptions
-        if (value.match(/^['"].*['"]$/)) return 'LITERAL_STRING';
-        if (value.startsWith('[') && value.endsWith(']')) return 'LITERAL_COLLECTION';
-        if (value.startsWith('{') && value.endsWith('}')) return 'LITERAL_COLLECTION';
-        if (!isNaN(value) && value.trim() !== '') return 'LITERAL_NUMBER';
-        if (value === 'true' || value === 'false') return 'LITERAL_BOOLEAN';
-        
-        return 'UNKNOWN_OPERATOR';
     }
 }
