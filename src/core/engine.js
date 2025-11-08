@@ -1,6 +1,6 @@
 // FILENAME: src/core/engine.js
 // 
-// Fluxus Language Runtime Engine v8.7 - FIXED ARRAY HANDLING
+// Fluxus Language Runtime Engine v9.0 - COMPLETE OPERATOR SET
 
 import { FluxusPackageManager } from '../package-manager.js';
 
@@ -32,6 +32,7 @@ function extractArgsFromMalformedName(name) {
 }
 
 const STANDARD_OPERATORS = {
+    // === CORE ARITHMETIC ===
     'print': (input, args) => { 
         let output;
         
@@ -75,6 +76,82 @@ const STANDARD_OPERATORS = {
         console.log(`→ subtract: ${input} - ${args.join(' - ')} = ${result}`);
         return result;
     },
+    'divide': (input, args) => {
+        let result = parseFloat(input);
+        args.forEach(arg => {
+            result /= parseFloat(arg);
+        });
+        console.log(`→ divide: ${input} / ${args.join(' / ')} = ${result}`);
+        return result;
+    },
+
+    // === STRING OPERATIONS ===
+    'trim': (input, args) => {
+        const result = String(input).trim();
+        console.log(`→ trim: "${input}" -> "${result}"`);
+        return result;
+    },
+    'break': (input, args) => {
+        const delimiter = args && args.length > 0 ? args[0] : ' ';
+        const result = String(input).split(delimiter);
+        console.log(`→ break: "${input}" by "${delimiter}" ->`, result);
+        return result;
+    },
+    'concat': (input, args) => {
+        const result = String(input) + args.join('');
+        console.log(`→ concat: "${input}" + "${args.join('')}" -> "${result}"`);
+        return result;
+    },
+    'to_upper': (input, args) => {
+        const result = String(input).toUpperCase();
+        console.log(`→ to_upper: "${input}" -> "${result}"`);
+        return result;
+    },
+    'to_lower': (input, args) => {
+        const result = String(input).toLowerCase();
+        console.log(`→ to_lower: "${input}" -> "${result}"`);
+        return result;
+    },
+
+    // === CUSTOM MATH OPERATIONS ===
+    'double': (input, args) => {
+        const result = parseFloat(input) * 2;
+        console.log(`→ double: ${input} * 2 = ${result}`);
+        return result;
+    },
+    'add_five': (input, args) => {
+        const result = parseFloat(input) + 5;
+        console.log(`→ add_five: ${input} + 5 = ${result}`);
+        return result;
+    },
+    'square': (input, args) => {
+        const result = parseFloat(input) * parseFloat(input);
+        console.log(`→ square: ${input}² = ${result}`);
+        return result;
+    },
+
+    // === SENSOR OPERATIONS ===
+    'detect_steps': (input, args) => {
+        const mockSteps = Math.floor(Math.random() * 3);
+        console.log(`→ detect_steps: simulated ${mockSteps} steps from sensor data`);
+        return mockSteps;
+    },
+    'detect_mock_steps': (input, args) => {
+        const mockSteps = Math.floor(Math.random() * 5);
+        console.log(`→ detect_mock_steps: simulated ${mockSteps} steps`);
+        return mockSteps;
+    },
+    'calculate_magnitude': (input, args) => {
+        const magnitude = Math.sqrt(
+            Math.pow(input.x || 0, 2) + 
+            Math.pow(input.y || 0, 2) + 
+            Math.pow(input.z || 0, 2)
+        );
+        console.log(`→ calculate_magnitude: (${input.x}, ${input.y}, ${input.z}) -> ${magnitude.toFixed(2)}`);
+        return magnitude;
+    },
+
+    // === LENS OPERATORS (handled by LENS_OPERATOR type) ===
     'map': (input, args, context) => {
         return input;
     },
@@ -84,6 +161,8 @@ const STANDARD_OPERATORS = {
     'filter': (input, args, context) => {
         return input;
     },
+
+    // === REACTIVE OPERATORS ===
     'combine_latest': (input, args, context) => {
         const poolValues = {};
         args.forEach(poolName => {
@@ -249,6 +328,8 @@ export class RuntimeEngine {
                             currentData = this.executeReduce(currentData, effectiveArgs[0]);
                         } else if (cleanOperatorName === 'filter') {
                             currentData = this.executeFilter(currentData, effectiveArgs[0]);
+                        } else if (cleanOperatorName === 'split') {
+                            currentData = this.executeSplit(currentData, effectiveArgs[0]);
                         }
                     } catch (error) {
                         this.log('ERROR', `❌ Lens Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
@@ -321,9 +402,8 @@ export class RuntimeEngine {
 
     // LENS EXECUTION METHODS
     executeLens(inputData, lensExpression) {
-        // FIX: Handle the case where inputData is a string that should be an array
+        // Handle the case where inputData is a string that should be an array
         if (typeof inputData === 'string' && inputData.includes(',')) {
-            // Try to parse comma-separated string back to array
             try {
                 const parsedArray = inputData.split(',').map(item => parseFloat(item.trim()));
                 if (parsedArray.every(item => !isNaN(item))) {
@@ -368,6 +448,10 @@ export class RuntimeEngine {
                     const subtrahend = parseFloat(argMatch[1]);
                     result = parseFloat(result) - subtrahend;
                 }
+            } else if (step.startsWith('double(')) {
+                result = parseFloat(result) * 2;
+            } else if (step.startsWith('add_five(')) {
+                result = parseFloat(result) + 5;
             }
         }
         
@@ -375,7 +459,7 @@ export class RuntimeEngine {
     }
 
     executeReduce(inputData, lensExpression) {
-        // FIX: Handle the case where inputData is a string that should be an array
+        // Handle the case where inputData is a string that should be an array
         if (typeof inputData === 'string' && inputData.includes(',')) {
             try {
                 const parsedArray = inputData.split(',').map(item => parseFloat(item.trim()));
@@ -412,6 +496,18 @@ export class RuntimeEngine {
             });
         }
         return inputData;
+    }
+
+    executeSplit(inputData, lensExpression) {
+        // Simple condition evaluation for split
+        if (lensExpression.includes('==')) {
+            const [left, right] = lensExpression.split('==').map(s => s.trim());
+            if (left === '.status_code') {
+                const isTrue = inputData.status_code === parseInt(right);
+                return { isTrue: isTrue, data: inputData };
+            }
+        }
+        return { isTrue: false, data: inputData };
     }
     
     linkSubscriptions() {
