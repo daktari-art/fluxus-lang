@@ -173,3 +173,4 @@ try {
     console.error('❌ Installation failed:', error.message);
     process.exit(1);
 }
+// CI trigger
