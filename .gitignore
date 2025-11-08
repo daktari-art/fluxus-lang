@@ -1,4 +1,10 @@
-# Fluxus Language Project - .gitignore
+# Keep install.js - it's essential for installation
+# But exclude other temporary files
+/debug_*.js
+/test_parser_fix.js
+*.sh
+/tmp/
+/scratch/
 
 # ------------------------------------
 # 1. DEPENDENCIES & ARTIFACTS
@@ -12,7 +18,7 @@
 /yarn.lock
 
 # ------------------------------------
-# 2. LOGS AND TEMPORARY FILES
+# 2. LOGS AND TEMPORARY FILES  
 # ------------------------------------
 /logs
 *.log
@@ -39,8 +45,4 @@ yarn-debug.log*
 # ------------------------------------
 # 5. DEBUG AND DEVELOPMENT FILES
 # ------------------------------------
-/debug_*.js
-/test_*.js
 *.tmp
-/tmp/
-/scratch/
