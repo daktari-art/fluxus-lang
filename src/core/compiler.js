@@ -1,6 +1,6 @@
 // FILENAME: src/core/compiler.js
 // 
-// Fluxus Language Compiler v4.1 - FIXED LENS OPERATOR TYPE CHECKING
+// Fluxus Language Compiler v4.2 - ADDED SPLIT LENS SUPPORT
 
 export class Compiler {
     constructor() {
@@ -20,10 +20,10 @@ export class Compiler {
             'map': { input: 'Array', output: 'Array', args: 'Lens' },
             'reduce': { input: 'Array', output: 'Number', args: 'Lens' },
             'filter': { input: 'Array', output: 'Array', args: 'Lens' },
+            'split': { input: 'Any', output: 'Boolean', args: 'Lens' }, // ADDED
             'fetch_url': { input: 'String', output: 'Object', args: 'Object' }, 
             'print': { input: 'Any', output: 'Void', args: null, isSink: true },
             'to_pool': { input: 'Any', output: 'Void', args: 'PoolName', isSink: true },
-            'split': { input: 'Any', output: 'Boolean', args: null },
             'combine_latest': { input: 'Any', output: 'Object', args: 'PoolName' },
             'hash_sha256': { input: 'String', output: 'String', args: null },
             'ui_render': { input: 'Any', output: 'Void', args: 'String', isSink: true }
@@ -89,7 +89,7 @@ export class Compiler {
                 
                 if (toNode.type === 'LENS_OPERATOR') {
                     // Lens operators are always valid - skip detailed type checking
-                    const validLensOperators = ['map', 'reduce', 'filter'];
+                    const validLensOperators = ['map', 'reduce', 'filter', 'split']; // ADDED split
                     if (!validLensOperators.includes(funcName)) {
                         console.warn(`   ⚠️ Type Warning on line ${toNode.line}: Unknown lens operator '${funcName}'. Expected one of: ${validLensOperators.join(', ')}`);
                     }

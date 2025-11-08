@@ -1,6 +1,6 @@
 // FILENAME: src/core/parser.js
 // 
-// Fluxus Language Graph Parser v4.4 - FIXED LENS SPLITTING
+// Fluxus Language Graph Parser v5.2 - ARROW FUNCTION LENS SUPPORT
 
 const generateUUID = () => `node_${Math.random().toString(36).substring(2, 9)}`; 
 
@@ -23,9 +23,11 @@ export class GraphParser {
             finiteStreams: [],
         };
 
-        // Pre-process: Remove comments and empty lines
-        const cleanedLines = sourceCode
-            .split('\n')
+        // STEP 1: PRE-PROCESS - Reconstruct multi-line expressions
+        const reconstructedLines = this.reconstructMultiLineExpressions(sourceCode);
+        
+        // STEP 2: Remove comments and empty lines
+        const cleanedLines = reconstructedLines
             .map((line, index) => {
                 const commentIndex = line.indexOf('#');
                 let cleanLine = (commentIndex !== -1) ? line.substring(0, commentIndex).trim() : line.trim();
@@ -40,6 +42,7 @@ export class GraphParser {
         let currentPipelineId = null;
         let previousNodeId = null;
 
+        // STEP 3: Parse each complete line
         for (const item of cleanedLines) {
             const { line, lineNum } = item;
 
@@ -64,7 +67,6 @@ export class GraphParser {
             
             if (line.startsWith('~') || line.startsWith('|') || line.startsWith('TRUE_FLOW') || line.startsWith('FALSE_FLOW')) {
                 
-                // FIXED: Split by pipe but preserve lens expressions
                 const parts = this.splitPipeline(line);
                 
                 if (line.startsWith('~')) {
@@ -158,29 +160,102 @@ export class GraphParser {
         return ast;
     }
 
-    // NEW: Smart pipeline splitting that preserves lens expressions
+    // Reconstruct multi-line expressions into single lines
+    reconstructMultiLineExpressions(sourceCode) {
+        const lines = sourceCode.split('\n');
+        const reconstructed = [];
+        let currentExpression = '';
+        let braceDepth = 0;
+        let parenDepth = 0;
+        let inMultiLine = false;
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim();
+            
+            // Skip comment-only lines
+            if (line.startsWith('#')) {
+                reconstructed.push(line);
+                continue;
+            }
+            
+            // Remove inline comments
+            const commentIndex = line.indexOf('#');
+            if (commentIndex !== -1) {
+                line = line.substring(0, commentIndex).trim();
+            }
+            
+            if (line.length === 0) {
+                if (inMultiLine) {
+                    currentExpression += ' '; // Continue the expression
+                } else {
+                    reconstructed.push('');
+                }
+                continue;
+            }
+
+            // Count braces and parentheses to detect multi-line expressions
+            for (let char of line) {
+                if (char === '{') braceDepth++;
+                if (char === '}') braceDepth--;
+                if (char === '(') parenDepth++;
+                if (char === ')') parenDepth--;
+            }
+
+            if (inMultiLine) {
+                currentExpression += ' ' + line;
+                
+                // Check if expression is complete
+                if (braceDepth === 0 && parenDepth === 0) {
+                    reconstructed.push(currentExpression);
+                    currentExpression = '';
+                    inMultiLine = false;
+                }
+            } else {
+                // Check if this line starts a multi-line expression
+                if (braceDepth > 0 || parenDepth > 0) {
+                    currentExpression = line;
+                    inMultiLine = true;
+                } else {
+                    reconstructed.push(line);
+                }
+            }
+        }
+
+        // Handle case where file ends with incomplete expression
+        if (inMultiLine && currentExpression) {
+            reconstructed.push(currentExpression);
+        }
+
+        return reconstructed;
+    }
+
+    // Smart pipeline splitting
     splitPipeline(line) {
         const parts = [];
         let current = '';
         let braceDepth = 0;
-        let inLens = false;
+        let parenDepth = 0;
+        let quote = null;
         
         for (let i = 0; i < line.length; i++) {
             const char = line[i];
-            const nextChar = line[i + 1];
             
-            if (char === '{') {
-                braceDepth++;
-                inLens = true;
-            } else if (char === '}') {
-                braceDepth--;
-                if (braceDepth === 0) {
-                    inLens = false;
+            if (char === '\'' || char === '"') {
+                if (quote === char) {
+                    quote = null;
+                } else if (quote === null) {
+                    quote = char;
                 }
             }
             
-            // Split on pipe only when not inside a lens
-            if (char === '|' && braceDepth === 0 && !inLens) {
+            if (quote === null) {
+                if (char === '{') braceDepth++;
+                if (char === '}') braceDepth--;
+                if (char === '(') parenDepth++;
+                if (char === ')') parenDepth--;
+            }
+            
+            if (char === '|' && braceDepth === 0 && parenDepth === 0 && quote === null) {
                 if (current.trim()) {
                     parts.push(current.trim());
                 }
@@ -253,37 +328,55 @@ export class GraphParser {
         let args = [];
         let type = 'FUNCTION_OPERATOR';
         
-        // FIXED: Better lens detection
-        const lensMatch = part.match(/^(map|reduce|filter)\s*\{([^}]+)\}\s*$/);
-        if (lensMatch) {
-            name = lensMatch[1].trim();
-            const lensContent = lensMatch[2].trim();
-            args = [lensContent];
+        // EXTENDED LENS DETECTION - Support both syntaxes
+        const lensOperators = ['map', 'reduce', 'filter', 'split'];
+        
+        // Pattern 1: Arrow function syntax (map { data -> { ... } })
+        const arrowPattern = /^(map)\s*\{([^{}]+)->\s*\{([^}]+)\}\s*\}$/;
+        const arrowMatch = part.match(arrowPattern);
+        
+        if (arrowMatch && lensOperators.includes(arrowMatch[1])) {
+            name = arrowMatch[1].trim();
+            const param = arrowMatch[2].trim();
+            const body = arrowMatch[3].trim();
+            args = [param, body]; // Store both parameter and body
             type = 'LENS_OPERATOR';
         }
-        // Handle standard function operators with parentheses
-        else if (part.includes('(') && part.includes(')')) {
-            const openParen = part.indexOf('(');
-            const closeParen = part.lastIndexOf(')');
+        // Pattern 2: Simple pipe syntax (map { .value | multiply(10) })
+        else {
+            const lensPattern = /^(\w+)\s*\{([^}]*)\}\s*$/;
+            const lensMatch = part.match(lensPattern);
             
-            if (openParen < closeParen) {
-                name = part.substring(0, openParen).trim();
-                const argString = part.substring(openParen + 1, closeParen).trim();
+            if (lensMatch && lensOperators.includes(lensMatch[1])) {
+                name = lensMatch[1].trim();
+                const lensContent = lensMatch[2].trim();
+                args = [lensContent];
+                type = 'LENS_OPERATOR';
+            }
+            // Handle standard function operators
+            else if (part.includes('(') && part.includes(')')) {
+                const openParen = part.indexOf('(');
+                const closeParen = part.lastIndexOf(')');
                 
-                if (argString) {
-                    args = this.parseArgs(argString);
+                if (openParen < closeParen) {
+                    name = part.substring(0, openParen).trim();
+                    const argString = part.substring(openParen + 1, closeParen).trim();
+                    
+                    if (argString) {
+                        args = this.parseArgs(argString);
+                    }
                 }
             }
-        }
-        // Handle flow branches
-        else if (part === 'TRUE_FLOW' || part === 'FALSE_FLOW') {
-            name = part;
-            type = 'FLOW_BRANCH';
-            args = [];
-        }
-        // Handle plain operators
-        else {
-            name = part.trim();
+            // Handle flow branches
+            else if (part === 'TRUE_FLOW' || part === 'FALSE_FLOW') {
+                name = part;
+                type = 'FLOW_BRANCH';
+                args = [];
+            }
+            // Handle plain operators
+            else {
+                name = part.trim();
+            }
         }
 
         return {
