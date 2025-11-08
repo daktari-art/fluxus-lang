@@ -1,6 +1,6 @@
 // FILENAME: src/core/parser.js
 // 
-// Fluxus Language Graph Parser v4.0 - FINAL VERIFIED CODE (Fixes: Pool Subscriptions & Split Flow)
+// Fluxus Language Graph Parser v4.4 - FIXED LENS SPLITTING
 
 const generateUUID = () => `node_${Math.random().toString(36).substring(2, 9)}`; 
 
@@ -8,8 +8,8 @@ export class GraphParser {
     constructor() {
         this.connectionTypes = {
             '|': 'PIPE_FLOW', 
-            '->': 'POOL_READ_FLOW', // Pool Subscription
-            '<-': 'POOL_WRITE_FLOW' // Not used in v4.0 but kept for future
+            '->': 'POOL_READ_FLOW',
+            '<-': 'POOL_WRITE_FLOW'
         };
     }
 
@@ -19,18 +19,17 @@ export class GraphParser {
             connections: [],
             pools: {},
             functions: {},
-            liveStreams: [], // New list for ~? streams
-            finiteStreams: [], // New list for ~ streams
+            liveStreams: [],
+            finiteStreams: [],
         };
 
-        // 1. Pre-process: Remove comments and empty lines
+        // Pre-process: Remove comments and empty lines
         const cleanedLines = sourceCode
             .split('\n')
             .map((line, index) => {
                 const commentIndex = line.indexOf('#');
                 let cleanLine = (commentIndex !== -1) ? line.substring(0, commentIndex).trim() : line.trim();
                 
-                // Add the original line number to track errors
                 if (cleanLine.length > 0) {
                     return { line: cleanLine, lineNum: index + 1 };
                 }
@@ -44,22 +43,15 @@ export class GraphParser {
         for (const item of cleanedLines) {
             const { line, lineNum } = item;
 
-            // Handle Flow Imports (e.g., FLOW http)
             if (line.startsWith('FLOW')) {
-                 // FLOW is currently ignored by the parser but is necessary for imports
                  continue;
             }
 
-            // 1. Handle pool declarations (e.g., let count = <|> 0)
             if (line.includes('<|>')) {
                 this.parsePoolDeclaration(line, lineNum, ast);
                 continue;
             }
 
-            // 2. Handle Pool Subscriptions (e.g., my_pool -> print())
-            // Pool subscriptions start a flow with a pool read (e.g., 'pool_name -> ...').
-            // CRITICAL FIX: The line MUST NOT start with a pipeline symbol (|, ~) 
-            // to prevent misinterpreting a lens block like '| map { data -> {} }' as a subscription.
             if (line.includes('->') && 
                 !line.startsWith('~') &&
                 !line.startsWith('|') &&
@@ -70,50 +62,32 @@ export class GraphParser {
                 continue;
             }
             
-            // 3. Handle Stream Pipeline continuation or start
-            
-            // Check for new stream start or pipe continuation
             if (line.startsWith('~') || line.startsWith('|') || line.startsWith('TRUE_FLOW') || line.startsWith('FALSE_FLOW')) {
                 
-                // Get the elements of the line
-                const parts = line.split('|').map(p => p.trim()).filter(p => p.length > 0);
+                // FIXED: Split by pipe but preserve lens expressions
+                const parts = this.splitPipeline(line);
                 
-                // If the line starts a new stream (i.e., not starting with |)
                 if (line.startsWith('~')) {
-                    // Reset pipeline for a new stream
                     currentPipelineId = generateUUID();
                     previousNodeId = null;
-                } 
-                // If it starts with TRUE/FALSE_FLOW, it's a split continuation
-                else if (line.startsWith('TRUE_FLOW') || line.startsWith('FALSE_FLOW')) {
-                    // This node is a special connector and doesn't reset the pipeline ID
-                    // It should not occur at the start of a line without a preceding pipe in the source code
+                } else if (line.startsWith('TRUE_FLOW') || line.startsWith('FALSE_FLOW')) {
                     throw new Error(`❌ Syntax Error on line ${lineNum}: TRUE_FLOW/FALSE_FLOW must be piped (|) from a split operator.`);
-                } 
-                // If it's a pipe continuation, keep the current pipelineId and previousNodeId
-                else if (line.startsWith('|')) {
-                    // Check if there's an active pipeline. 
-                    // Allow | TRUE_FLOW / | FALSE_FLOW to implicitly 'restart' the pipeline ID
-                    // if the previous branch terminated it. This is a hack for sequential parsing.
+                } else if (line.startsWith('|')) {
                     if (!currentPipelineId) {
                         const isSplitContinuation = parts[0].startsWith('TRUE_FLOW') || parts[0].startsWith('FALSE_FLOW');
                         if (isSplitContinuation) {
-                            // Assign a new ID for the new branch. The runtime must link this back to the split manually.
                             currentPipelineId = generateUUID();
-                            previousNodeId = null; // Clear previous node ID
+                            previousNodeId = null;
                         } else {
                             throw new Error(`❌ Syntax Error on line ${lineNum}: Pipe (|) used without a preceding stream source (~ or ~?).`);
                         }
                     }
-                    // The first part of a continuation pipe is the operator
                 }
 
-                // Process all parts (operators/sources) in the line
                 for (let i = 0; i < parts.length; i++) {
                     const part = parts[i];
                     
                     if (part.startsWith('~')) {
-                        // Source node (~ or ~?)
                         const isLive = part.startsWith('~?');
                         const valuePart = part.substring(isLive ? 2 : 1).trim();
                         
@@ -135,12 +109,11 @@ export class GraphParser {
                         }
 
                     } else if (part.startsWith('TRUE_FLOW') || part.startsWith('FALSE_FLOW')) {
-                        // Split flow continuation node
                         const type = part.startsWith('TRUE_FLOW') ? 'TRUE_FLOW' : 'FALSE_FLOW';
                         
                         const flowNode = {
                             id: generateUUID(),
-                            pipelineId: currentPipelineId, // IMPORTANT: Inherit from split node
+                            pipelineId: currentPipelineId,
                             type: type,
                             value: null,
                             line: lineNum,
@@ -148,7 +121,6 @@ export class GraphParser {
                         };
                         ast.nodes.push(flowNode);
 
-                        // Connect this flow node to the previous pipe's node (which should be the split)
                         if (previousNodeId) {
                             ast.connections.push({
                                 from: previousNodeId,
@@ -161,11 +133,9 @@ export class GraphParser {
                         previousNodeId = flowNode.id;
 
                     } else if (part.length > 0) {
-                        // Operator node (e.g., map {...} or add(5))
                         const operatorNode = this.parseOperator(part, lineNum, currentPipelineId);
                         ast.nodes.push(operatorNode);
 
-                        // Connect the new node to the previous node
                         if (previousNodeId) {
                             ast.connections.push({
                                 from: previousNodeId,
@@ -177,10 +147,8 @@ export class GraphParser {
                         
                         previousNodeId = operatorNode.id;
                         
-                        // Check for terminal operator
                         if (operatorNode.name === 'to_pool' || operatorNode.name === 'print') {
                             operatorNode.isTerminal = true;
-                            // The sequential parser will now not crash when encountering the next branch.
                         }
                     }
                 }
@@ -190,23 +158,56 @@ export class GraphParser {
         return ast;
     }
 
-    // Parses a pool subscription flow (e.g., pool -> map {..} | to_pool(...))
+    // NEW: Smart pipeline splitting that preserves lens expressions
+    splitPipeline(line) {
+        const parts = [];
+        let current = '';
+        let braceDepth = 0;
+        let inLens = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+            
+            if (char === '{') {
+                braceDepth++;
+                inLens = true;
+            } else if (char === '}') {
+                braceDepth--;
+                if (braceDepth === 0) {
+                    inLens = false;
+                }
+            }
+            
+            // Split on pipe only when not inside a lens
+            if (char === '|' && braceDepth === 0 && !inLens) {
+                if (current.trim()) {
+                    parts.push(current.trim());
+                }
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        
+        if (current.trim()) {
+            parts.push(current.trim());
+        }
+        
+        return parts;
+    }
+
     parseSubscription(line, lineNum, ast) {
-        // Example: click_count -> ui_render('#display_div')
         const parts = line.split('->').map(p => p.trim());
         const poolName = parts[0].trim();
         
         if (!ast.pools[poolName]) {
-            // Log warning, but allow subscription to be linked in runtime
             console.warn(`⚠️ Warning: Subscription on line ${lineNum} uses pool '${poolName}' which is not declared.`);
         }
 
-        const subscriptionFlow = parts[1].trim(); // Everything after the first '->'
-        
-        // Treat the pool subscription as the start of a new, special pipeline
+        const subscriptionFlow = parts[1].trim();
         const pipelineId = generateUUID();
 
-        // 1. Create the POOL_READ node
         const poolReadNode = {
             id: generateUUID(),
             pipelineId: pipelineId,
@@ -219,14 +220,12 @@ export class GraphParser {
         
         let previousNodeId = poolReadNode.id;
 
-        // 2. Parse the rest of the flow (e.g., ui_render('#display_div'))
-        const flowParts = subscriptionFlow.split('|').map(p => p.trim()).filter(p => p.length > 0);
+        const flowParts = this.splitPipeline(subscriptionFlow);
 
         for (const part of flowParts) {
             const operatorNode = this.parseOperator(part, lineNum, pipelineId);
             ast.nodes.push(operatorNode);
 
-            // Connect the new node to the previous node
             ast.connections.push({
                 from: previousNodeId,
                 to: operatorNode.id,
@@ -236,58 +235,53 @@ export class GraphParser {
             
             previousNodeId = operatorNode.id;
             
-            // Check for terminal operator
             if (operatorNode.name === 'to_pool' || operatorNode.name === 'print') {
                 operatorNode.isTerminal = true;
             }
         }
         
-        // Add a special subscription connection
         ast.connections.push({
             from: poolReadNode.id,
-            to: previousNodeId, // Connects to the last node in the flow
+            to: previousNodeId,
             type: this.connectionTypes['->'],
             line: lineNum
         });
     }
 
-
     parseOperator(part, lineNum, pipelineId) {
-        // Examples: add(5), map { .value | add(1) }
-        
         let name = part;
         let args = [];
         let type = 'FUNCTION_OPERATOR';
         
-        const openParen = part.indexOf('(');
-        const closeParen = part.lastIndexOf(')');
-
-        const openBrace = part.indexOf('{');
-        const closeBrace = part.lastIndexOf('}');
-        
-        // Handle Map/Filter/Reduce (Lens operators)
-        if (openBrace !== -1 && closeBrace !== -1 && openBrace < closeBrace) {
-            const lensContent = part.substring(openBrace + 1, closeBrace).trim();
-            name = part.substring(0, openBrace).trim(); // e.g., 'map'
+        // FIXED: Better lens detection
+        const lensMatch = part.match(/^(map|reduce|filter)\s*\{([^}]+)\}\s*$/);
+        if (lensMatch) {
+            name = lensMatch[1].trim();
+            const lensContent = lensMatch[2].trim();
             args = [lensContent];
-            type = 'LENS_OPERATOR'; // Custom type for Map/Filter/Reduce logic
+            type = 'LENS_OPERATOR';
         }
-        // Handle Standard Function Operators (e.g., add(5, 10))
-        else if (openParen !== -1 && closeParen !== -1 && openParen < closeParen) {
-            name = part.substring(0, openParen).trim();
-            const argString = part.substring(openParen + 1, closeParen).trim();
+        // Handle standard function operators with parentheses
+        else if (part.includes('(') && part.includes(')')) {
+            const openParen = part.indexOf('(');
+            const closeParen = part.lastIndexOf(')');
             
-            if (argString) {
-                args = this.parseArgs(argString);
+            if (openParen < closeParen) {
+                name = part.substring(0, openParen).trim();
+                const argString = part.substring(openParen + 1, closeParen).trim();
+                
+                if (argString) {
+                    args = this.parseArgs(argString);
+                }
             }
         }
-        // Handle TRUE_FLOW/FALSE_FLOW
+        // Handle flow branches
         else if (part === 'TRUE_FLOW' || part === 'FALSE_FLOW') {
             name = part;
             type = 'FLOW_BRANCH';
             args = [];
         }
-        // Handle Operator without args (e.g., print)
+        // Handle plain operators
         else {
             name = part.trim();
         }
@@ -298,19 +292,18 @@ export class GraphParser {
             type: type,
             name: name,
             args: args,
-            value: part, // Store the original text for debugging/compilation
+            value: part,
             line: lineNum,
             isTerminal: false,
         };
     }
 
-    // Simple arg parser that handles basic literals and strings
     parseArgs(argString) {
         const args = [];
         let current = '';
-        let braceDepth = 0; // {}
-        let parenDepth = 0; // ()
-        let quote = null; // Single or double quote
+        let braceDepth = 0;
+        let parenDepth = 0;
+        let quote = null;
 
         for (let i = 0; i < argString.length; i++) {
             const char = argString[i];
