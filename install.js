@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 // FILENAME: install.js
-// Fluxus Language Installation Script - FINAL FIX: Absolute Path Wrapper
+// Fluxus Language Installation Script - ENHANCED VERSION
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// __dirname is the directory where install.js is located (~/fluxus-lang)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 class FluxusInstaller {
     constructor() {
-        // Correctly sets projectRoot to the directory containing install.js
         this.projectRoot = __dirname; 
         this.globalInstall = process.argv.includes('--global');
         this.installDir = this.globalInstall ?
@@ -20,7 +18,6 @@ class FluxusInstaller {
     }
 
     findGlobalInstallDir() {
-        // ... (Logic to find writable dir is already correct)
         const possibleDirs = [
             '/data/data/com.termux/files/usr/bin', // Termux specific
             '/usr/local/bin',                      // Standard Linux/macOS
@@ -52,8 +49,13 @@ class FluxusInstaller {
             return;
         }
 
-        // CRITICAL FIX: Generate the wrapper content with the hardcoded absolute path
+        // ENHANCEMENT: Verify CLI exists before creating wrapper
         const cliAbsPath = path.join(this.projectRoot, 'src', 'cli.js');
+        if (!fs.existsSync(cliAbsPath)) {
+            console.error(`❌ CLI not found at: ${cliAbsPath}`);
+            console.error('   Please ensure you are in the Fluxus project root directory.');
+            process.exit(1);
+        }
 
         const wrapperContent = `#!/usr/bin/env node
 /**
@@ -85,15 +87,19 @@ main();
 `;
 
         try {
-            // Write the new, path-corrected wrapper file to the global bin path
             fs.writeFileSync(targetBin, wrapperContent);
-            
-            // Set the executable permission
             fs.chmodSync(targetBin, 0o755); 
 
             console.log(`✅ Fluxus CLI installed successfully!`);
             console.log(`   Command: fluxus`);
             console.log(`   Location: ${targetBin}`);
+            
+            // ENHANCEMENT: Test the installation
+            console.log('🔍 Testing installation...');
+            const { execSync } = await import('child_process');
+            const version = execSync(`${targetBin} --version`, { encoding: 'utf8' }).trim();
+            console.log(`✅ Fluxus ${version} is working!`);
+            
             this.globalInstall = true;
 
         } catch (error) {
@@ -105,15 +111,50 @@ main();
 
     installLocal() {
         console.log(`✅ Local Fluxus installation complete.`);
-        console.log(`   Use 'npm start' or 'npm run <command>' to execute.`);
+        console.log(`   Run examples with: node src/cli.js run examples/hello.flux`);
+        console.log(`   Or use npm scripts: npm start`);
     }
 
-    createExamples() { /* ... */ }
+    createExamples() {
+        console.log('📁 Examples are available in ./examples/');
+    }
 
-    printPostInstallInstructions() { /* ... */ }
+    printPostInstallInstructions() {
+        console.log('\n🎉 Fluxus Installation Complete!');
+        console.log('\n📚 Quick Start Guide:');
+        
+        if (this.globalInstall) {
+            console.log('   fluxus run examples/hello.flux     # Run a program');
+            console.log('   fluxus repl                        # Start interactive mode');
+            console.log('   fluxus tutorial                    # Learn the language');
+            console.log('   fluxus --help                      # See all commands');
+        } else {
+            console.log('   node src/cli.js run examples/hello.flux');
+            console.log('   node src/cli.js repl');
+            console.log('   node src/cli.js tutorial');
+            console.log('   node src/cli.js --help');
+        }
+        
+        console.log('\n🧪 Run test suite:');
+        console.log('   node test-run.js');
+        
+        console.log('\n🔧 Reinstall globally later:');
+        console.log('   node install.js --global');
+    }
 
-    install() {
+    async install() {
         console.log('🚀 Installing Fluxus Language...\n');
+        
+        // ENHANCEMENT: Install dependencies first
+        console.log('📦 Installing dependencies...');
+        try {
+            const { execSync } = await import('child_process');
+            execSync('npm install', { stdio: 'inherit' });
+            console.log('✅ Dependencies installed');
+        } catch (error) {
+            console.log('⚠️  Dependency installation had issues, but continuing...');
+        }
+        
         if (this.globalInstall) {
             this.installGlobal();
         } else {
