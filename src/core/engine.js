@@ -1,8 +1,8 @@
 // FILENAME: src/core/engine.js
-// 
-// Fluxus Language Runtime Engine v9.1 - COMPLETE OPERATOR SET + REPL ENHANCEMENTS
+// Fluxus Language Runtime Engine v9.2 - FIXED STREAM EXECUTION
 
 import { FluxusPackageManager } from '../package-manager.js';
+import { FluxusLibraryLoader } from '../lib/hybrid-loader.js';
 
 function extractArgsFromMalformedName(name) {
     const openParenIndex = name.indexOf('(');
@@ -32,7 +32,6 @@ function extractArgsFromMalformedName(name) {
 }
 
 const STANDARD_OPERATORS = {
-    // === CORE ARITHMETIC ===
     'print': (input, args) => { 
         let output;
         
@@ -40,10 +39,10 @@ const STANDARD_OPERATORS = {
              const prefix = args[0];
              output = `${prefix}${input}`;
         } else {
-            output = typeof input === 'object' ? JSON.stringify(input, null, 2) : input;
+            output = typeof input === 'object' ? JSON.stringify(input, null, 2) : String(input);
         }
         
-        console.log(`✅ Fluxus Stream Output: ${output}`);
+        console.log(`✅ Fluxus Output: ${output}`);
         return input;
     },
     'to_pool': (input, args, context) => {
@@ -84,8 +83,6 @@ const STANDARD_OPERATORS = {
         console.log(`→ divide: ${input} / ${args.join(' / ')} = ${result}`);
         return result;
     },
-
-    // === STRING OPERATIONS ===
     'trim': (input, args) => {
         const result = String(input).trim();
         console.log(`→ trim: "${input}" -> "${result}"`);
@@ -112,8 +109,6 @@ const STANDARD_OPERATORS = {
         console.log(`→ to_lower: "${input}" -> "${result}"`);
         return result;
     },
-
-    // === CUSTOM MATH OPERATIONS ===
     'double': (input, args) => {
         const result = parseFloat(input) * 2;
         console.log(`→ double: ${input} * 2 = ${result}`);
@@ -129,8 +124,6 @@ const STANDARD_OPERATORS = {
         console.log(`→ square: ${input}² = ${result}`);
         return result;
     },
-
-    // === SENSOR OPERATIONS ===
     'detect_steps': (input, args) => {
         const mockSteps = Math.floor(Math.random() * 3);
         console.log(`→ detect_steps: simulated ${mockSteps} steps from sensor data`);
@@ -150,8 +143,6 @@ const STANDARD_OPERATORS = {
         console.log(`→ calculate_magnitude: (${input.x}, ${input.y}, ${input.z}) -> ${magnitude.toFixed(2)}`);
         return magnitude;
     },
-
-    // === LENS OPERATORS (handled by LENS_OPERATOR type) ===
     'map': (input, args, context) => {
         return input;
     },
@@ -161,8 +152,6 @@ const STANDARD_OPERATORS = {
     'filter': (input, args, context) => {
         return input;
     },
-
-    // === REACTIVE OPERATORS ===
     'combine_latest': (input, args, context) => {
         const poolValues = {};
         args.forEach(poolName => {
@@ -209,10 +198,77 @@ export class RuntimeEngine {
         this.debugMode = false;
         this.operators = {}; 
         this.packageManager = new FluxusPackageManager(); 
+        this.libraryLoader = new FluxusLibraryLoader(this);
+        this.loadedLibraries = new Set();
         this.logLevel = 'INFO';
-        // 🎯 NEW: REPL-specific enhancements
         this.replMode = false;
-        this.realStreams = new Map(); // For future live sensor data
+        this.realStreams = new Map();
+        
+        this.initializeCoreLibraries();
+    }
+
+    async initializeCoreLibraries() {
+        const coreLibraries = ['core', 'types', 'collections', 'math', 'string', 'time'];
+        
+        for (const libName of coreLibraries) {
+            try {
+                await this.importLibrary(libName);
+            } catch (error) {
+                console.warn(`⚠️ Could not load core library: ${libName}`, error.message);
+            }
+        }
+    }
+
+    async importLibrary(libraryName) {
+        if (this.loadedLibraries.has(libraryName)) {
+            return true;
+        }
+        
+        try {
+            const libraryOperators = await this.libraryLoader.loadLibrary(libraryName);
+            
+            // 🎯 CRITICAL FIX: Proper operator registration
+            if (libraryOperators && typeof libraryOperators === 'object') {
+                Object.keys(libraryOperators).forEach(opName => {
+                    if (libraryOperators[opName] && typeof libraryOperators[opName] === 'object') {
+                        this.operators[opName] = libraryOperators[opName].implementation || libraryOperators[opName];
+                    } else {
+                        this.operators[opName] = libraryOperators[opName];
+                    }
+                });
+                
+                this.loadedLibraries.add(libraryName);
+                
+                if (this.debugMode) {
+                    const opCount = Object.keys(libraryOperators).length;
+                    console.log(`📚 Library registered: ${libraryName} (${opCount} operators)`);
+                }
+                
+                return true;
+            } else {
+                console.log(`   ⚠️ No operators found in library: ${libraryName}`);
+                return false;
+            }
+            
+        } catch (error) {
+            console.error(`❌ Failed to import library ${libraryName}:`, error.message);
+            return false;
+        }
+    }
+
+    async handleFlowImport(flowName) {
+        const libraryMap = {
+            'ui': 'dom',
+            'network': 'http',
+            'crypto': 'crypto',
+            'sensors': 'sensors',
+            'math': 'math',
+            'time': 'time',
+            'text': 'string'
+        };
+        
+        const libraryName = libraryMap[flowName] || flowName;
+        return await this.importLibrary(libraryName);
     }
 
     log(level, message) {
@@ -222,45 +278,52 @@ export class RuntimeEngine {
         }
     }
 
-    // 🎯 NEW: REPL-specific start method
     startRepl(ast) {
         this.replMode = true;
         this.start(ast);
     }
 
-    start(ast) {
+    async start(ast) {
         this.ast = ast;
-        this.loadAllOperators(); 
+        
+        if (ast.imports && ast.imports.length > 0) {
+            if (!this.replMode) {
+                console.log('\n📦 Loading libraries...');
+            }
+            for (const importName of ast.imports) {
+                await this.handleFlowImport(importName);
+            }
+        }
+        
+        this.loadAllOperators();
         this.initializePools();
         this.linkSubscriptions();
         this.activateLiveStreams();
         this.runFiniteStreams();
         
-        // 🎯 FIX: Only show activation message in non-REPL mode
         if (!this.replMode) {
-            this.log('INFO', `\n✅ Fluxus Runtime Activated. Waiting for events...`);
+            const libs = this.getLoadedLibraries().join(', ');
+            this.log('INFO', `\n✅ Fluxus Runtime Activated. Libraries: ${libs || 'none'}`);
         }
     }
 
     loadAllOperators() {
-        // 🎯 ENHANCEMENT: Load package operators first, then standard operators
         const packageOperators = this.packageManager.getInstalledOperators();
-        this.operators = { ...packageOperators, ...STANDARD_OPERATORS };
+        this.operators = { ...STANDARD_OPERATORS, ...this.operators, ...packageOperators };
         
         if (this.debugMode) {
             this.log('DEBUG', `📦 Loaded ${Object.keys(packageOperators).length} package operators`);
+            this.log('DEBUG', `📚 Loaded ${this.loadedLibraries.size} libraries`);
             this.log('DEBUG', `🔧 Loaded ${Object.keys(STANDARD_OPERATORS).length} standard operators`);
         }
     }
 
     initializePools() {
-        // 🎯 CRITICAL FIX: Better pool initialization with REPL support
         for (const poolName in this.ast.pools) {
             const poolDef = this.ast.pools[poolName];
             try {
                 let initialValue = this.parseLiteralValue(poolDef.initial);
                 
-                // 🎯 FIX: Don't overwrite existing pools in REPL mode
                 if (this.replMode && this.pools[poolName]) {
                     this.log('DEBUG', `   * Preserving existing pool '${poolName}' with value: ${this.pools[poolName].value}`);
                     continue;
@@ -288,7 +351,6 @@ export class RuntimeEngine {
             }
         }
         
-        // 🎯 FIX: Only create default pools if not in REPL mode or they don't exist
         if (!this.replMode || !this.pools['username_pool']) {
             this.pools['username_pool'] = { value: '', subscriptions: new Set(), history: [''], _updates: 0 };
         }
@@ -314,7 +376,6 @@ export class RuntimeEngine {
             pool._updates = (pool._updates || 0) + 1;
             pool.history.push(newValue);
             
-            // 🎯 ENHANCEMENT: Better logging for REPL
             if (this.replMode) {
                 console.log(`🔄 Updated pool '${poolName}' to ${this.formatValueForDisplay(newValue)}`);
             } else {
@@ -328,7 +389,6 @@ export class RuntimeEngine {
         }
     }
 
-    // 🎯 NEW: Helper for value display
     formatValueForDisplay(value) {
         if (Array.isArray(value)) {
             return `[${value.slice(0, 3).join(', ')}${value.length > 3 ? '...' : ''}]`;
@@ -339,29 +399,30 @@ export class RuntimeEngine {
         return String(value);
     }
 
+    // 🎯 CRITICAL FIX: Enhanced stream execution
     runPipeline(startNodeId, initialData) {
         let currentNode = this.ast.nodes.find(n => n.id === startNodeId);
         let currentData = initialData;
         
+        if (!currentNode) {
+            this.log('ERROR', `❌ Pipeline node not found: ${startNodeId}`);
+            return;
+        }
+        
         let step = 0;
         
-        if (currentNode.type === 'POOL_READ') {
-            if (this.debugMode) {
-                this.log('DEBUG', `   * Executing Reactive Subscription Pipeline...`);
-            }
-        } else {
-            if (this.debugMode) {
-                this.log('DEBUG', `   * Executing Live Stream Pipeline...`);
-            }
+        if (this.debugMode) {
+            const nodeType = currentNode.type === 'POOL_READ' ? 'Reactive Subscription' : 'Stream';
+            this.log('DEBUG', `   * Executing ${nodeType} Pipeline from: ${currentNode.value}`);
         }
         
         while (currentNode) {
             step++;
             
-            if (currentNode.type !== 'POOL_READ' && currentNode.type !== 'STREAM_SOURCE_LIVE') {
+            if (currentNode.type !== 'POOL_READ' && currentNode.type !== 'STREAM_SOURCE_LIVE' && currentNode.type !== 'STREAM_SOURCE_FINITE') {
                 const lineInfo = currentNode.line ? `Line ${currentNode.line}: ` : '';
                 if (this.debugMode) {
-                    this.log('DEBUG', `     -> [PIPELINE STEP ${step}] ${lineInfo}Executing ${currentNode.name}`);
+                    this.log('DEBUG', `     -> [STEP ${step}] ${lineInfo}${currentNode.name}`);
                 }
             }
 
@@ -378,19 +439,21 @@ export class RuntimeEngine {
                     }
                 }
                 
-                // 🎯 ENHANCEMENT: Package operator integration
-                // FIRST: Check package operators
-                const packageOp = this.operators[cleanOperatorName];
-                if (packageOp && packageOp.implementation) {
+                const operator = this.operators[cleanOperatorName];
+                
+                if (operator) {
                     try {
-                        currentData = packageOp.implementation(currentData, effectiveArgs, { engine: this });
+                        const impl = typeof operator === 'function' ? operator : (operator.implementation || operator);
+                        currentData = impl(currentData, effectiveArgs, { engine: this });
+                        
+                        if (this.debugMode) {
+                            this.log('DEBUG', `       Result: ${this.formatValueForDisplay(currentData)}`);
+                        }
                     } catch (error) {
-                        this.log('ERROR', `❌ Package Operator Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
+                        this.log('ERROR', `❌ Operator Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
                         return; 
                     }
-                }
-                // THEN: Handle LENS OPERATORS
-                else if (currentNode.type === 'LENS_OPERATOR') {
+                } else if (currentNode.type === 'LENS_OPERATOR') {
                     try {
                         if (cleanOperatorName === 'map') {
                             currentData = this.executeLens(currentData, effectiveArgs[0]);
@@ -405,25 +468,18 @@ export class RuntimeEngine {
                         this.log('ERROR', `❌ Lens Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
                         return;
                     }
-                } 
-                // THEN: Handle REGULAR OPERATORS
-                else {
-                    const operator = this.operators[cleanOperatorName];
-                    const impl = operator ? (operator.implementation || operator) : null;
-                    
-                    if (impl) {
-                        try {
-                            currentData = impl(currentData, effectiveArgs, { engine: this });
-                        } catch (error) {
-                            this.log('ERROR', `❌ Operator Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
-                            return; 
-                        }
-                    } else {
-                        this.log('ERROR', `❌ Unknown Operator: ${currentNode.name} on line ${currentNode.line}`);
-                        return;
-                    }
+                } else {
+                    this.log('ERROR', `❌ Unknown Operator: ${currentNode.name} on line ${currentNode.line}`);
+                    return;
                 }
             } 
+            
+            if (currentNode.isTerminal) {
+                if (this.debugMode) {
+                    this.log('DEBUG', `     -> [TERMINAL] Pipeline completed`);
+                }
+                break;
+            }
             
             let nextConnection = this.ast.connections.find(c => c.from === currentNode.id && c.type === 'PIPE_FLOW');
             
@@ -441,7 +497,10 @@ export class RuntimeEngine {
             
             currentNode = nextConnection ? this.ast.nodes.find(n => n.id === nextConnection.to) : null;
             
-            if (currentNode && currentNode.name && (currentNode.name.startsWith('to_pool(') || currentNode.name.startsWith('print(') || currentNode.name.startsWith('ui_render('))) {
+            if (currentNode && currentNode.name && 
+                (currentNode.name.startsWith('to_pool(') || 
+                 currentNode.name.startsWith('print(') || 
+                 currentNode.name.startsWith('ui_render('))) {
                 
                 let sinkName = currentNode.name;
                 let effectiveArgs = currentNode.args || []; 
@@ -454,34 +513,23 @@ export class RuntimeEngine {
                     }
                 }
                 
-                if (currentNode.line === 71 && sinkName === 'ui_render') {
-                     effectiveArgs = ['#display_div']; 
+                const operator = this.operators[sinkName];
+                if (operator) {
+                    operator(currentData, effectiveArgs, { engine: this });
                 }
-                if (currentNode.line === 72 && sinkName === 'print') {
-                     effectiveArgs = ['Auth Status Updated: ']; 
-                }
-                
-                const operator = this.operators[sinkName] || STANDARD_OPERATORS[sinkName];
-                 if (operator) {
-                     operator(currentData, effectiveArgs, { engine: this });
-                 }
                 break;
             }
         }
     }
 
-    // LENS EXECUTION METHODS
     executeLens(inputData, lensExpression) {
-        // Handle the case where inputData is a string that should be an array
         if (typeof inputData === 'string' && inputData.includes(',')) {
             try {
                 const parsedArray = inputData.split(',').map(item => parseFloat(item.trim()));
                 if (parsedArray.every(item => !isNaN(item))) {
                     inputData = parsedArray;
                 }
-            } catch (e) {
-                // If parsing fails, continue with original input
-            }
+            } catch (e) {}
         }
         
         if (Array.isArray(inputData)) {
@@ -529,16 +577,13 @@ export class RuntimeEngine {
     }
 
     executeReduce(inputData, lensExpression) {
-        // Handle the case where inputData is a string that should be an array
         if (typeof inputData === 'string' && inputData.includes(',')) {
             try {
                 const parsedArray = inputData.split(',').map(item => parseFloat(item.trim()));
                 if (parsedArray.every(item => !isNaN(item))) {
                     inputData = parsedArray;
                 }
-            } catch (e) {
-                // If parsing fails, continue with original input
-            }
+            } catch (e) {}
         }
         
         if (!Array.isArray(inputData)) {
@@ -569,7 +614,6 @@ export class RuntimeEngine {
     }
 
     executeSplit(inputData, lensExpression) {
-        // Simple condition evaluation for split
         if (lensExpression.includes('==')) {
             const [left, right] = lensExpression.split('==').map(s => s.trim());
             if (left === '.status_code') {
@@ -596,19 +640,18 @@ export class RuntimeEngine {
     }
 
     activateLiveStreams() {
-        // 🎯 ENHANCEMENT: Prepare for real stream sources
         const liveSources = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_LIVE');
         
         if (this.debugMode) {
             this.log('DEBUG', `   * Found ${liveSources.length} live stream sources`);
         }
         
-        // For now, keep existing mock behavior
         if (!this.replMode) {
             this.log('INFO', `   * Activating ${liveSources.length} Live Streams...`);
         }
     }
 
+    // 🎯 CRITICAL FIX: Enhanced finite stream execution
     runFiniteStreams() {
         const finiteStreams = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_FINITE');
         
@@ -617,7 +660,11 @@ export class RuntimeEngine {
         }
         
         finiteStreams.forEach(streamNode => {
-            this.runPipeline(streamNode.id, this.parseLiteralValue(streamNode.value));
+            if (this.debugMode) {
+                this.log('DEBUG', `   * Executing finite stream: ${streamNode.value}`);
+            }
+            const initialData = this.parseLiteralValue(streamNode.value);
+            this.runPipeline(streamNode.id, initialData);
         });
     }
 
@@ -654,22 +701,23 @@ export class RuntimeEngine {
         return value;
     }
 
-    // 🎯 NEW: Enhanced stream management for future sensor integration
     isRealStreamSource(source) {
         return source.value && source.value.includes('sensors.') && this.realStreams.has(source.value);
     }
 
     activateRealStream(source) {
-        // Placeholder for real sensor stream activation
         if (this.debugMode) {
             this.log('DEBUG', `   * Activating real stream: ${source.value}`);
         }
     }
 
     activateMockStream(source) {
-        // Existing mock stream behavior
         if (this.debugMode) {
             this.log('DEBUG', `   * Activating mock stream: ${source.value}`);
         }
+    }
+
+    getLoadedLibraries() {
+        return Array.from(this.loadedLibraries);
     }
 }

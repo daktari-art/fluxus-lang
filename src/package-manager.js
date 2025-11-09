@@ -259,6 +259,7 @@ function getOperatorDescription(operator) {
         });
         return operators;
     }
+
     /**
      * Retrieves an operator implementation from an installed package.
      * This method is asynchronous because it may need to dynamically import the package file.
@@ -320,4 +321,20 @@ function getOperatorDescription(operator) {
         }
     }
 
+    // FIXED: Added missing loadPackageOperators method
+    async loadPackageOperators(packageName) {
+        try {
+            const packagePath = path.join(this.packagesDir, packageName, 'index.js');
+            if (fs.existsSync(packagePath)) {
+                const packageUrl = pathToFileURL(packagePath).href;
+                const module = await import(packageUrl);
+                
+                // Look for standard operator exports
+                return module.FLUXUS_OPERATORS || module.HTTP_OPERATORS || module.default || {};
+            }
+        } catch (error) {
+            console.error(`❌ Failed to load package operators for ${packageName}:`, error.message);
+        }
+        return {};
+    }
 }
