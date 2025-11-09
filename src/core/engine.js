@@ -1,6 +1,6 @@
 // FILENAME: src/core/engine.js
 // 
-// Fluxus Language Runtime Engine v9.0 - COMPLETE OPERATOR SET
+// Fluxus Language Runtime Engine v9.1 - COMPLETE OPERATOR SET + REPL ENHANCEMENTS
 
 import { FluxusPackageManager } from '../package-manager.js';
 
@@ -210,6 +210,9 @@ export class RuntimeEngine {
         this.operators = {}; 
         this.packageManager = new FluxusPackageManager(); 
         this.logLevel = 'INFO';
+        // 🎯 NEW: REPL-specific enhancements
+        this.replMode = false;
+        this.realStreams = new Map(); // For future live sensor data
     }
 
     log(level, message) {
@@ -219,6 +222,12 @@ export class RuntimeEngine {
         }
     }
 
+    // 🎯 NEW: REPL-specific start method
+    startRepl(ast) {
+        this.replMode = true;
+        this.start(ast);
+    }
+
     start(ast) {
         this.ast = ast;
         this.loadAllOperators(); 
@@ -226,18 +235,36 @@ export class RuntimeEngine {
         this.linkSubscriptions();
         this.activateLiveStreams();
         this.runFiniteStreams();
-        this.log('INFO', `\n✅ Fluxus Runtime Activated. Waiting for events...`);
+        
+        // 🎯 FIX: Only show activation message in non-REPL mode
+        if (!this.replMode) {
+            this.log('INFO', `\n✅ Fluxus Runtime Activated. Waiting for events...`);
+        }
     }
 
     loadAllOperators() {
-        this.operators = { ...STANDARD_OPERATORS, ...this.packageManager.getInstalledOperators() };
+        // 🎯 ENHANCEMENT: Load package operators first, then standard operators
+        const packageOperators = this.packageManager.getInstalledOperators();
+        this.operators = { ...packageOperators, ...STANDARD_OPERATORS };
+        
+        if (this.debugMode) {
+            this.log('DEBUG', `📦 Loaded ${Object.keys(packageOperators).length} package operators`);
+            this.log('DEBUG', `🔧 Loaded ${Object.keys(STANDARD_OPERATORS).length} standard operators`);
+        }
     }
 
     initializePools() {
+        // 🎯 CRITICAL FIX: Better pool initialization with REPL support
         for (const poolName in this.ast.pools) {
             const poolDef = this.ast.pools[poolName];
             try {
                 let initialValue = this.parseLiteralValue(poolDef.initial);
+                
+                // 🎯 FIX: Don't overwrite existing pools in REPL mode
+                if (this.replMode && this.pools[poolName]) {
+                    this.log('DEBUG', `   * Preserving existing pool '${poolName}' with value: ${this.pools[poolName].value}`);
+                    continue;
+                }
                 
                 this.pools[poolName] = {
                     value: initialValue, 
@@ -245,6 +272,10 @@ export class RuntimeEngine {
                     history: [initialValue], 
                     _updates: 0
                 };
+                
+                if (this.debugMode) {
+                    this.log('DEBUG', `   * Initialized pool '${poolName}' = ${initialValue}`);
+                }
             } catch (error) {
                 this.log('ERROR', `❌ Failed to initialize pool '${poolName}': ${error.message}`);
                 this.pools[poolName] = {
@@ -257,14 +288,17 @@ export class RuntimeEngine {
             }
         }
         
-        if (!this.pools['username_pool']) {
+        // 🎯 FIX: Only create default pools if not in REPL mode or they don't exist
+        if (!this.replMode || !this.pools['username_pool']) {
             this.pools['username_pool'] = { value: '', subscriptions: new Set(), history: [''], _updates: 0 };
         }
-        if (!this.pools['password_pool']) {
+        if (!this.replMode || !this.pools['password_pool']) {
             this.pools['password_pool'] = { value: '', subscriptions: new Set(), history: [''], _updates: 0 };
         }
         
-        this.log('INFO', `   * Initialized ${Object.keys(this.pools).length} Tidal Pools.`);
+        if (!this.replMode) {
+            this.log('INFO', `   * Initialized ${Object.keys(this.pools).length} Tidal Pools.`);
+        }
     }
 
     updatePool(poolName, newValue) {
@@ -278,12 +312,31 @@ export class RuntimeEngine {
         if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
             pool.value = newValue;
             pool._updates = (pool._updates || 0) + 1;
+            pool.history.push(newValue);
+            
+            // 🎯 ENHANCEMENT: Better logging for REPL
+            if (this.replMode) {
+                console.log(`🔄 Updated pool '${poolName}' to ${this.formatValueForDisplay(newValue)}`);
+            } else {
+                this.log('INFO', `🔄 Updated pool '${poolName}' to ${this.formatValueForDisplay(newValue)}`);
+            }
             
             pool.subscriptions.forEach(subscriptionNodeId => {
                 const startNode = this.ast.nodes.find(n => n.id === subscriptionNodeId);
                 this.runPipeline(startNode.id, pool.value); 
             });
         }
+    }
+
+    // 🎯 NEW: Helper for value display
+    formatValueForDisplay(value) {
+        if (Array.isArray(value)) {
+            return `[${value.slice(0, 3).join(', ')}${value.length > 3 ? '...' : ''}]`;
+        }
+        if (typeof value === 'object' && value !== null) {
+            return JSON.stringify(value).substring(0, 50) + (JSON.stringify(value).length > 50 ? '...' : '');
+        }
+        return String(value);
     }
 
     runPipeline(startNodeId, initialData) {
@@ -293,9 +346,13 @@ export class RuntimeEngine {
         let step = 0;
         
         if (currentNode.type === 'POOL_READ') {
-            this.log('DEBUG', `   * Executing Reactive Subscription Pipeline...`);
+            if (this.debugMode) {
+                this.log('DEBUG', `   * Executing Reactive Subscription Pipeline...`);
+            }
         } else {
-            this.log('DEBUG', `   * Executing Live Stream Pipeline...`);
+            if (this.debugMode) {
+                this.log('DEBUG', `   * Executing Live Stream Pipeline...`);
+            }
         }
         
         while (currentNode) {
@@ -303,7 +360,9 @@ export class RuntimeEngine {
             
             if (currentNode.type !== 'POOL_READ' && currentNode.type !== 'STREAM_SOURCE_LIVE') {
                 const lineInfo = currentNode.line ? `Line ${currentNode.line}: ` : '';
-                this.log('DEBUG', `     -> [PIPELINE STEP ${step}] ${lineInfo} Executing ${currentNode.name}`);
+                if (this.debugMode) {
+                    this.log('DEBUG', `     -> [PIPELINE STEP ${step}] ${lineInfo}Executing ${currentNode.name}`);
+                }
             }
 
             if (currentNode.type === 'FUNCTION_OPERATOR' || currentNode.type === 'LENS_OPERATOR') {
@@ -319,8 +378,19 @@ export class RuntimeEngine {
                     }
                 }
                 
-                // HANDLE LENS OPERATORS
-                if (currentNode.type === 'LENS_OPERATOR') {
+                // 🎯 ENHANCEMENT: Package operator integration
+                // FIRST: Check package operators
+                const packageOp = this.operators[cleanOperatorName];
+                if (packageOp && packageOp.implementation) {
+                    try {
+                        currentData = packageOp.implementation(currentData, effectiveArgs, { engine: this });
+                    } catch (error) {
+                        this.log('ERROR', `❌ Package Operator Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
+                        return; 
+                    }
+                }
+                // THEN: Handle LENS OPERATORS
+                else if (currentNode.type === 'LENS_OPERATOR') {
                     try {
                         if (cleanOperatorName === 'map') {
                             currentData = this.executeLens(currentData, effectiveArgs[0]);
@@ -336,7 +406,7 @@ export class RuntimeEngine {
                         return;
                     }
                 } 
-                // HANDLE REGULAR OPERATORS
+                // THEN: Handle REGULAR OPERATORS
                 else {
                     const operator = this.operators[cleanOperatorName];
                     const impl = operator ? (operator.implementation || operator) : null;
@@ -519,16 +589,32 @@ export class RuntimeEngine {
                 this.runPipeline(node.id, this.pools[poolName].value); 
             }
         });
-        this.log('INFO', `   * Linking ${subscriptionNodes.length} Reactive Subscription...`);
+        
+        if (!this.replMode) {
+            this.log('INFO', `   * Linking ${subscriptionNodes.length} Reactive Subscription...`);
+        }
     }
 
     activateLiveStreams() {
-        this.log('INFO', `   * Activating 0 Live Streams...`);
+        // 🎯 ENHANCEMENT: Prepare for real stream sources
+        const liveSources = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_LIVE');
+        
+        if (this.debugMode) {
+            this.log('DEBUG', `   * Found ${liveSources.length} live stream sources`);
+        }
+        
+        // For now, keep existing mock behavior
+        if (!this.replMode) {
+            this.log('INFO', `   * Activating ${liveSources.length} Live Streams...`);
+        }
     }
 
     runFiniteStreams() {
         const finiteStreams = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_FINITE');
-        this.log('INFO', `   * Running ${finiteStreams.length} Finite Streams...`);
+        
+        if (!this.replMode) {
+            this.log('INFO', `   * Running ${finiteStreams.length} Finite Streams...`);
+        }
         
         finiteStreams.forEach(streamNode => {
             this.runPipeline(streamNode.id, this.parseLiteralValue(streamNode.value));
@@ -566,5 +652,24 @@ export class RuntimeEngine {
         if (value.startsWith(`\"`) && value.endsWith(`\"`)) return value.slice(1, -1);
         
         return value;
+    }
+
+    // 🎯 NEW: Enhanced stream management for future sensor integration
+    isRealStreamSource(source) {
+        return source.value && source.value.includes('sensors.') && this.realStreams.has(source.value);
+    }
+
+    activateRealStream(source) {
+        // Placeholder for real sensor stream activation
+        if (this.debugMode) {
+            this.log('DEBUG', `   * Activating real stream: ${source.value}`);
+        }
+    }
+
+    activateMockStream(source) {
+        // Existing mock stream behavior
+        if (this.debugMode) {
+            this.log('DEBUG', `   * Activating mock stream: ${source.value}`);
+        }
     }
 }
