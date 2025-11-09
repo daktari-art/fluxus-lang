@@ -40,7 +40,7 @@ class FluxusInstaller {
         return this.projectRoot;
     }
 
-    installGlobal() {
+    async installGlobal() {
         const targetBin = path.join(this.installDir, 'fluxus');
         
         if (this.installDir === this.projectRoot) {
@@ -160,7 +160,7 @@ main();
         }
         
         if (this.globalInstall) {
-            this.installGlobal();
+            await this.installGlobal();
         } else {
             this.installLocal();
         }
