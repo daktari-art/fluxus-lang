@@ -1,36 +1,10 @@
 // FILENAME: src/core/engine.js
-// Fluxus Language Runtime Engine v9.2 - FIXED STREAM EXECUTION
+// Fluxus Language Runtime Engine v10.2 - PRODUCTION STABLE
 
 import { FluxusPackageManager } from '../package-manager.js';
 import { FluxusLibraryLoader } from '../lib/hybrid-loader.js';
 
-function extractArgsFromMalformedName(name) {
-    const openParenIndex = name.indexOf('(');
-    const closeParenIndex = name.lastIndexOf(')');
-    
-    if (openParenIndex === -1 || closeParenIndex === -1) {
-        return [];
-    }
-
-    let argsString = name.substring(openParenIndex + 1, closeParenIndex).trim();
-
-    if (argsString.includes('|')) {
-        argsString = argsString.split('|')[0].trim();
-    }
-
-    if (argsString.startsWith(`'`) && argsString.endsWith(`'`)) {
-        return [argsString.slice(1, -1)];
-    }
-    if (argsString.startsWith(`\"`) && argsString.endsWith(`\"`)) {
-        return [argsString.slice(1, -1)];
-    }
-    if (argsString) {
-        return argsString.split(',').map(a => a.trim());
-    }
-    
-    return [];
-}
-
+// STANDARD OPERATORS - MUST BE DEFINED FIRST
 const STANDARD_OPERATORS = {
     'print': (input, args) => { 
         let output;
@@ -54,17 +28,15 @@ const STANDARD_OPERATORS = {
     },
     'ui_render': (input, args) => { 
         const targetSelector = args && args.length > 0 ? args[0] : 'undefined_target';
-        console.log(`[UI_RENDER] Rendering to ${targetSelector} with Auth Status: ${input.status}`); 
+        console.log(`[UI_RENDER] Rendering to ${targetSelector} with data:`, input); 
         return input; 
     },
     'add': (input, args) => {
         const result = args.reduce((acc, arg) => acc + parseFloat(arg), parseFloat(input));
-        console.log(`→ add: ${input} + ${args.join(' + ')} = ${result}`);
         return result;
     },
     'multiply': (input, args) => {
         const result = args.reduce((acc, arg) => acc * parseFloat(arg), parseFloat(input));
-        console.log(`→ multiply: ${input} * ${args.join(' * ')} = ${result}`);
         return result;
     },
     'subtract': (input, args) => {
@@ -72,7 +44,6 @@ const STANDARD_OPERATORS = {
         args.forEach(arg => {
             result -= parseFloat(arg);
         });
-        console.log(`→ subtract: ${input} - ${args.join(' - ')} = ${result}`);
         return result;
     },
     'divide': (input, args) => {
@@ -80,76 +51,75 @@ const STANDARD_OPERATORS = {
         args.forEach(arg => {
             result /= parseFloat(arg);
         });
-        console.log(`→ divide: ${input} / ${args.join(' / ')} = ${result}`);
         return result;
     },
     'trim': (input, args) => {
-        const result = String(input).trim();
-        console.log(`→ trim: "${input}" -> "${result}"`);
-        return result;
+        return String(input).trim();
     },
     'break': (input, args) => {
         const delimiter = args && args.length > 0 ? args[0] : ' ';
-        const result = String(input).split(delimiter);
-        console.log(`→ break: "${input}" by "${delimiter}" ->`, result);
-        return result;
+        return String(input).split(delimiter);
     },
     'concat': (input, args) => {
-        const result = String(input) + args.join('');
-        console.log(`→ concat: "${input}" + "${args.join('')}" -> "${result}"`);
-        return result;
+        return String(input) + args.join('');
     },
     'to_upper': (input, args) => {
-        const result = String(input).toUpperCase();
-        console.log(`→ to_upper: "${input}" -> "${result}"`);
-        return result;
+        return String(input).toUpperCase();
     },
     'to_lower': (input, args) => {
-        const result = String(input).toLowerCase();
-        console.log(`→ to_lower: "${input}" -> "${result}"`);
-        return result;
+        return String(input).toLowerCase();
     },
     'double': (input, args) => {
-        const result = parseFloat(input) * 2;
-        console.log(`→ double: ${input} * 2 = ${result}`);
-        return result;
+        return parseFloat(input) * 2;
     },
     'add_five': (input, args) => {
-        const result = parseFloat(input) + 5;
-        console.log(`→ add_five: ${input} + 5 = ${result}`);
-        return result;
+        return parseFloat(input) + 5;
     },
     'square': (input, args) => {
-        const result = parseFloat(input) * parseFloat(input);
-        console.log(`→ square: ${input}² = ${result}`);
-        return result;
+        return parseFloat(input) * parseFloat(input);
     },
     'detect_steps': (input, args) => {
-        const mockSteps = Math.floor(Math.random() * 3);
-        console.log(`→ detect_steps: simulated ${mockSteps} steps from sensor data`);
-        return mockSteps;
+        return Math.floor(Math.random() * 3);
     },
     'detect_mock_steps': (input, args) => {
-        const mockSteps = Math.floor(Math.random() * 5);
-        console.log(`→ detect_mock_steps: simulated ${mockSteps} steps`);
-        return mockSteps;
+        return Math.floor(Math.random() * 5);
     },
     'calculate_magnitude': (input, args) => {
-        const magnitude = Math.sqrt(
+        return Math.sqrt(
             Math.pow(input.x || 0, 2) + 
             Math.pow(input.y || 0, 2) + 
             Math.pow(input.z || 0, 2)
         );
-        console.log(`→ calculate_magnitude: (${input.x}, ${input.y}, ${input.z}) -> ${magnitude.toFixed(2)}`);
-        return magnitude;
     },
     'map': (input, args, context) => {
+        if (Array.isArray(input)) {
+            return input.map(item => {
+                if (args && args[0]) {
+                    return context.engine.executeLens(item, args[0]);
+                }
+                return item;
+            });
+        }
         return input;
     },
     'reduce': (input, args, context) => {
+        if (Array.isArray(input)) {
+            if (args && args[0] === '+') {
+                return input.reduce((acc, curr) => acc + curr, 0);
+            }
+        }
         return input;
     },
     'filter': (input, args, context) => {
+        if (Array.isArray(input)) {
+            return input.filter(item => {
+                if (args && args[0]) {
+                    const result = context.engine.executeLensOperation(item, args[0]);
+                    return Boolean(result);
+                }
+                return true;
+            });
+        }
         return input;
     },
     'combine_latest': (input, args, context) => {
@@ -172,7 +142,6 @@ const STANDARD_OPERATORS = {
         return `SHA256(${input})`; 
     },
     'fetch_url': (input) => { 
-        console.log(`[NETWORK] MOCK: Fetching ${input.username} with ${input.password_hash}`);
         return { 
             status_code: 200, 
             body: { 
@@ -185,18 +154,17 @@ const STANDARD_OPERATORS = {
     'split': (input) => {
         const isTrue = input.status_code === 200;
         return { isTrue: isTrue, data: input };
-    },
+    }
 };
-
 
 export class RuntimeEngine {
     constructor() {
         this.pools = {};
         this.subscriptions = {};
-        this.liveStreams = {};
+        this.liveStreams = [];
         this.ast = null;
         this.debugMode = false;
-        this.operators = {}; 
+        this.operators = { ...STANDARD_OPERATORS }; // Initialize with standard operators
         this.packageManager = new FluxusPackageManager(); 
         this.libraryLoader = new FluxusLibraryLoader(this);
         this.loadedLibraries = new Set();
@@ -204,6 +172,7 @@ export class RuntimeEngine {
         this.replMode = false;
         this.realStreams = new Map();
         
+        // Initialize core libraries immediately
         this.initializeCoreLibraries();
     }
 
@@ -227,7 +196,6 @@ export class RuntimeEngine {
         try {
             const libraryOperators = await this.libraryLoader.loadLibrary(libraryName);
             
-            // 🎯 CRITICAL FIX: Proper operator registration
             if (libraryOperators && typeof libraryOperators === 'object') {
                 Object.keys(libraryOperators).forEach(opName => {
                     if (libraryOperators[opName] && typeof libraryOperators[opName] === 'object') {
@@ -286,6 +254,7 @@ export class RuntimeEngine {
     async start(ast) {
         this.ast = ast;
         
+        // 🎯 CRITICAL FIX: Load imports BEFORE execution
         if (ast.imports && ast.imports.length > 0) {
             if (!this.replMode) {
                 console.log('\n📦 Loading libraries...');
@@ -319,6 +288,8 @@ export class RuntimeEngine {
     }
 
     initializePools() {
+        if (!this.ast.pools) return;
+        
         for (const poolName in this.ast.pools) {
             const poolDef = this.ast.pools[poolName];
             try {
@@ -351,6 +322,7 @@ export class RuntimeEngine {
             }
         }
         
+        // Initialize default pools if they don't exist
         if (!this.replMode || !this.pools['username_pool']) {
             this.pools['username_pool'] = { value: '', subscriptions: new Set(), history: [''], _updates: 0 };
         }
@@ -435,7 +407,7 @@ export class RuntimeEngine {
                 if (openParenIndex !== -1) {
                     cleanOperatorName = currentNode.name.substring(0, openParenIndex).trim();
                     if (effectiveArgs.length === 0) {
-                         effectiveArgs = extractArgsFromMalformedName(currentNode.name);
+                         effectiveArgs = this.extractArgsFromMalformedName(currentNode.name);
                     }
                 }
                 
@@ -509,7 +481,7 @@ export class RuntimeEngine {
                 if (sinkParenIndex !== -1) {
                     sinkName = currentNode.name.substring(0, sinkParenIndex).trim();
                     if (effectiveArgs.length === 0) {
-                         effectiveArgs = extractArgsFromMalformedName(currentNode.name);
+                         effectiveArgs = this.extractArgsFromMalformedName(currentNode.name);
                     }
                 }
                 
@@ -520,6 +492,33 @@ export class RuntimeEngine {
                 break;
             }
         }
+    }
+
+    extractArgsFromMalformedName(name) {
+        const openParenIndex = name.indexOf('(');
+        const closeParenIndex = name.lastIndexOf(')');
+        
+        if (openParenIndex === -1 || closeParenIndex === -1) {
+            return [];
+        }
+
+        let argsString = name.substring(openParenIndex + 1, closeParenIndex).trim();
+
+        if (argsString.includes('|')) {
+            argsString = argsString.split('|')[0].trim();
+        }
+
+        if (argsString.startsWith(`'`) && argsString.endsWith(`'`)) {
+            return [argsString.slice(1, -1)];
+        }
+        if (argsString.startsWith(`\"`) && argsString.endsWith(`\"`)) {
+            return [argsString.slice(1, -1)];
+        }
+        if (argsString) {
+            return argsString.split(',').map(a => a.trim());
+        }
+        
+        return [];
     }
 
     executeLens(inputData, lensExpression) {
@@ -651,7 +650,6 @@ export class RuntimeEngine {
         }
     }
 
-    // 🎯 CRITICAL FIX: Enhanced finite stream execution
     runFiniteStreams() {
         const finiteStreams = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_FINITE');
         
