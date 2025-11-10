@@ -1,7 +1,12 @@
 // FILENAME: src/core/parser.js
-// Fluxus Language Graph Parser v6.0 - CLEAN VERSION (No Debug Logs)
+// Fluxus Language Graph Parser v7.0 - PRODUCTION GRADE
 
-const generateUUID = () => `node_${Math.random().toString(36).substring(2, 9)}`;
+/**
+ * Production-grade parser for Fluxus Reactive Stream Language
+ * Handles: Streams (~), Live Streams (~?), Pools (<|>), Subscriptions (->), Pipes (|), Lenses ({})
+ */
+
+const generateUUID = () => `node_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
 
 export class GraphParser {
     constructor() {
@@ -10,8 +15,25 @@ export class GraphParser {
             '->': 'POOL_READ_FLOW',
             '<-': 'POOL_WRITE_FLOW'
         };
+        
+        // Enhanced operator classification
+        this.operatorCategories = {
+            'SOURCE': ['~', '~?'],
+            'SINK': ['print', 'to_pool', 'ui_render', 'write_file'],
+            'TRANSFORM': ['map', 'filter', 'reduce', 'add', 'multiply', 'trim', 'to_upper'],
+            'COMBINATION': ['combine_latest', 'merge', 'concat'],
+            'CONTROL': ['split', 'debounce', 'throttle', 'delay'],
+            'LENS': ['map', 'reduce', 'filter', 'split'] // Lens-capable operators
+        };
+        
+        this.debugMode = process.env.FLUXUS_PARSER_DEBUG === 'true';
     }
 
+    /**
+     * Main parsing entry point - converts Fluxus source to AST
+     * @param {string} sourceCode - Fluxus program source
+     * @returns {Object} Complete Abstract Syntax Tree
+     */
     parse(sourceCode) {
         const ast = {
             nodes: [],
@@ -21,57 +43,111 @@ export class GraphParser {
             functions: {},
             liveStreams: [],
             finiteStreams: [],
+            metadata: {
+                sourceLines: 0,
+                parsedAt: new Date().toISOString(),
+                version: '4.0'
+            }
         };
 
         const lines = this.preprocessSource(sourceCode);
+        ast.metadata.sourceLines = lines.length;
+        
         let currentPipeline = null;
+        let pipelineStack = [];
 
         for (const { line, lineNum } of lines) {
-            // Handle imports
-            if (this.isImport(line)) {
-                this.parseImport(line, lineNum, ast);
-                continue;
-            }
+            try {
+                // Handle imports
+                if (this.isImport(line)) {
+                    this.parseImport(line, lineNum, ast);
+                    continue;
+                }
 
-            // Handle pool declarations
-            if (this.isPoolDeclaration(line)) {
-                this.parsePoolDeclaration(line, lineNum, ast);
-                continue;
-            }
+                // Handle pool declarations
+                if (this.isPoolDeclaration(line)) {
+                    this.parsePoolDeclaration(line, lineNum, ast);
+                    continue;
+                }
 
-            // Handle subscriptions
-            if (this.isSubscription(line)) {
-                this.parseSubscription(line, lineNum, ast);
-                continue;
-            }
+                // Handle function definitions
+                if (this.isFunctionDefinition(line)) {
+                    this.parseFunctionDefinition(line, lineNum, ast);
+                    continue;
+                }
 
-            // Handle stream pipelines
-            if (this.isStreamPipeline(line)) {
-                currentPipeline = this.parseStreamPipeline(line, lineNum, ast, currentPipeline);
-            } else if (currentPipeline && this.isPipelineContinuation(line)) {
-                // Continue existing pipeline
-                this.extendPipeline(line, lineNum, ast, currentPipeline);
-            } else {
-                // Reset pipeline if we hit a non-pipeline line
-                currentPipeline = null;
+                // Handle subscriptions
+                if (this.isSubscription(line)) {
+                    this.parseSubscription(line, lineNum, ast);
+                    continue;
+                }
+
+                // Handle stream pipelines
+                if (this.isStreamPipeline(line)) {
+                    currentPipeline = this.parseStreamPipeline(line, lineNum, ast, currentPipeline);
+                    pipelineStack.push(currentPipeline);
+                } else if (currentPipeline && this.isPipelineContinuation(line)) {
+                    // Continue existing pipeline
+                    currentPipeline = this.extendPipeline(line, lineNum, ast, currentPipeline);
+                } else if (this.isPipelineTermination(line)) {
+                    // Pipeline termination
+                    currentPipeline = pipelineStack.length > 0 ? pipelineStack.pop() : null;
+                } else {
+                    // Reset pipeline if we hit a non-pipeline line
+                    currentPipeline = null;
+                    pipelineStack = [];
+                }
+            } catch (error) {
+                this.logParseError(lineNum, line, error.message);
+                // Continue parsing despite errors
             }
         }
 
+        this.validateAST(ast);
         return ast;
     }
 
+    /**
+     * Preprocess source code: remove comments, normalize, track line numbers
+     */
     preprocessSource(sourceCode) {
         const lines = sourceCode.split('\n');
         const processed = [];
+        let inMultilineComment = false;
 
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim();
+            
+            // Skip empty lines
             if (!line) continue;
-            if (line.startsWith('#')) continue;
 
+            // Handle multiline comments
+            if (inMultilineComment) {
+                if (line.includes('*/')) {
+                    inMultilineComment = false;
+                    line = line.substring(line.indexOf('*/') + 2).trim();
+                } else {
+                    continue; // Skip entire line if in multiline comment
+                }
+            }
+
+            // Check for multiline comment start
+            if (line.includes('/*')) {
+                inMultilineComment = true;
+                line = line.substring(0, line.indexOf('/*')).trim();
+                if (!line) continue;
+            }
+
+            // Remove single-line comments
             const commentIndex = line.indexOf('#');
             if (commentIndex !== -1) {
                 line = line.substring(0, commentIndex).trim();
+            }
+
+            // Remove JavaScript-style comments for compatibility
+            const jsCommentIndex = line.indexOf('//');
+            if (jsCommentIndex !== -1) {
+                line = line.substring(0, jsCommentIndex).trim();
             }
 
             if (line) {
@@ -79,47 +155,97 @@ export class GraphParser {
             }
         }
 
+        if (this.debugMode) {
+            console.log(`📝 Preprocessed ${processed.length}/${lines.length} lines`);
+        }
+
         return processed;
     }
 
     isImport(line) {
-        return line.startsWith('FLOW') || line.startsWith('IMPORT');
+        return line.startsWith('FLOW') || line.startsWith('IMPORT') || line.startsWith('FROM');
     }
 
     parseImport(line, lineNum, ast) {
         if (line.startsWith('FLOW')) {
-            const flowMatch = line.match(/FLOW\s+(\w+)/);
+            const flowMatch = line.match(/FLOW\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
             if (flowMatch) {
                 ast.imports.push(flowMatch[1]);
+                this.logParseInfo(lineNum, `Imported flow: ${flowMatch[1]}`);
+            } else {
+                this.logParseWarning(lineNum, `Malformed FLOW statement: ${line}`);
             }
         } else if (line.startsWith('IMPORT')) {
-            const importMatch = line.match(/IMPORT\s+(\w+)\s+FROM\s+"([^"]+)"/);
+            const importMatch = line.match(/IMPORT\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+FROM\s+"([^"]+)"/);
             if (importMatch) {
                 ast.imports.push({
                     alias: importMatch[1],
-                    path: importMatch[2]
+                    path: importMatch[2],
+                    type: 'MODULE'
+                });
+                this.logParseInfo(lineNum, `Imported module: ${importMatch[1]} from ${importMatch[2]}`);
+            }
+        } else if (line.startsWith('FROM')) {
+            const fromMatch = line.match(/FROM\s+"([^"]+)"\s+IMPORT\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
+            if (fromMatch) {
+                ast.imports.push({
+                    alias: fromMatch[2],
+                    path: fromMatch[1],
+                    type: 'MODULE'
                 });
             }
         }
     }
 
     isPoolDeclaration(line) {
-        return line.includes('<|>');
+        return line.includes('<|>') && line.startsWith('let ');
     }
 
     parsePoolDeclaration(line, lineNum, ast) {
-        const match = line.match(/let\s+(\w+)\s*=\s*<\|>\s*(.*)/);
+        const match = line.match(/let\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*<\|>\s*(.*)/);
         if (match) {
             const poolName = match[1];
             let initialValue = match[2].trim() || 'null';
+            
+            // Validate pool name
+            if (!this.isValidIdentifier(poolName)) {
+                throw new Error(`Invalid pool name: ${poolName}`);
+            }
             
             ast.pools[poolName] = {
                 id: generateUUID(),
                 name: poolName,
                 initial: initialValue,
                 line: lineNum,
-                value: null
+                value: null,
+                type: this.inferType(initialValue)
             };
+            
+            this.logParseInfo(lineNum, `Declared pool: ${poolName} = ${initialValue}`);
+        } else {
+            throw new Error(`Malformed pool declaration: ${line}`);
+        }
+    }
+
+    isFunctionDefinition(line) {
+        return line.startsWith('FUNC ') || line.startsWith('function ');
+    }
+
+    parseFunctionDefinition(line, lineNum, ast) {
+        const funcMatch = line.match(/(?:FUNC|function)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*:/);
+        if (funcMatch) {
+            const funcName = funcMatch[1];
+            const params = funcMatch[2].split(',').map(p => p.trim()).filter(p => p);
+            
+            ast.functions[funcName] = {
+                id: generateUUID(),
+                name: funcName,
+                parameters: params,
+                line: lineNum,
+                body: [] // Will be populated with subsequent lines
+            };
+            
+            this.logParseInfo(lineNum, `Defined function: ${funcName}(${params.join(', ')})`);
         }
     }
 
@@ -128,18 +254,23 @@ export class GraphParser {
                !line.startsWith('~') && 
                !line.startsWith('|') &&
                !line.startsWith('TRUE_FLOW') && 
-               !line.startsWith('FALSE_FLOW');
+               !line.startsWith('FALSE_FLOW') &&
+               !this.isPoolDeclaration(line);
     }
 
     parseSubscription(line, lineNum, ast) {
         const parts = line.split('->').map(p => p.trim());
-        const poolName = parts[0].trim();
+        if (parts.length !== 2) {
+            throw new Error(`Invalid subscription format. Expected: pool -> pipeline`);
+        }
+        
+        const poolName = parts[0];
         
         if (!ast.pools[poolName]) {
-            console.warn(`⚠️ Subscription uses undeclared pool: ${poolName}`);
+            this.logParseWarning(lineNum, `Subscription uses undeclared pool: ${poolName}`);
         }
 
-        const subscriptionFlow = parts[1].trim();
+        const subscriptionFlow = parts[1];
         const pipelineId = generateUUID();
 
         const poolReadNode = {
@@ -150,6 +281,7 @@ export class GraphParser {
             value: poolName,
             line: lineNum,
             isTerminal: false,
+            category: 'SOURCE'
         };
         ast.nodes.push(poolReadNode);
         
@@ -162,6 +294,7 @@ export class GraphParser {
             ast.nodes.push(operatorNode);
 
             ast.connections.push({
+                id: generateUUID(),
                 from: previousNodeId,
                 to: operatorNode.id,
                 type: this.connectionTypes['|'],
@@ -176,22 +309,31 @@ export class GraphParser {
         }
         
         ast.connections.push({
+            id: generateUUID(),
             from: poolReadNode.id,
             to: previousNodeId,
             type: this.connectionTypes['->'],
             line: lineNum
         });
+
+        this.logParseInfo(lineNum, `Created subscription: ${poolName} -> ${subscriptionFlow}`);
     }
 
     isStreamPipeline(line) {
         return line.startsWith('~') || 
-               (line.includes('|') && !this.isSubscription(line));
+               (line.includes('|') && !this.isSubscription(line)) ||
+               line.startsWith('TRUE_FLOW') || 
+               line.startsWith('FALSE_FLOW');
     }
 
     isPipelineContinuation(line) {
         return line.startsWith('|') || 
                line.startsWith('TRUE_FLOW') || 
                line.startsWith('FALSE_FLOW');
+    }
+
+    isPipelineTermination(line) {
+        return line === 'END' || line.startsWith('END_FLOW');
     }
 
     parseStreamPipeline(line, lineNum, ast, currentPipeline) {
@@ -215,6 +357,7 @@ export class GraphParser {
                     value: valuePart,
                     line: lineNum,
                     isTerminal: false,
+                    category: 'SOURCE'
                 };
                 
                 ast.nodes.push(sourceNode);
@@ -238,11 +381,13 @@ export class GraphParser {
                     value: null,
                     line: lineNum,
                     isTerminal: false,
+                    category: 'CONTROL'
                 };
                 ast.nodes.push(flowNode);
 
                 if (previousNodeId) {
                     ast.connections.push({
+                        id: generateUUID(),
                         from: previousNodeId,
                         to: flowNode.id,
                         type: this.connectionTypes['|'],
@@ -258,6 +403,7 @@ export class GraphParser {
 
                 if (previousNodeId) {
                     ast.connections.push({
+                        id: generateUUID(),
                         from: previousNodeId,
                         to: operatorNode.id,
                         type: this.connectionTypes['|'],
@@ -288,8 +434,10 @@ export class GraphParser {
         let name = part;
         let args = [];
         let type = 'FUNCTION_OPERATOR';
+        let category = 'TRANSFORM';
 
-        const lensOperators = ['map', 'reduce', 'filter', 'split'];
+        // Enhanced lens operator detection
+        const lensOperators = ['map', 'reduce', 'filter', 'split', 'compose_lenses', 'conditional_lens', 'transform_paths'];
         const lensPattern = /^(\w+)\s*\{([^}]*)\}\s*$/;
         const lensMatch = part.match(lensPattern);
         
@@ -298,6 +446,7 @@ export class GraphParser {
             const lensContent = lensMatch[2].trim();
             args = [lensContent];
             type = 'LENS_OPERATOR';
+            category = 'LENS';
         }
         else if (part.includes('(') && part.includes(')')) {
             const openParen = part.indexOf('(');
@@ -311,6 +460,9 @@ export class GraphParser {
                     args = this.parseArgs(argString);
                 }
             }
+            
+            // Classify operator
+            category = this.classifyOperator(name);
         }
         else if (/\w+\s*\(/.test(part)) {
             const match = part.match(/(\w+)\s*\((.*)\)/);
@@ -320,15 +472,18 @@ export class GraphParser {
                 if (argString) {
                     args = this.parseArgs(argString);
                 }
+                category = this.classifyOperator(name);
             }
         }
         else if (part === 'TRUE_FLOW' || part === 'FALSE_FLOW') {
             name = part;
             type = 'FLOW_BRANCH';
+            category = 'CONTROL';
             args = [];
         }
         else {
             name = part.trim();
+            category = this.classifyOperator(name);
         }
 
         return {
@@ -340,37 +495,69 @@ export class GraphParser {
             value: part,
             line: lineNum,
             isTerminal: false,
+            category: category
         };
     }
 
+    classifyOperator(operatorName) {
+        for (const [category, operators] of Object.entries(this.operatorCategories)) {
+            if (operators.includes(operatorName)) {
+                return category;
+            }
+        }
+        return 'TRANSFORM'; // Default category
+    }
+
     parseArgs(argString) {
+        // Handle empty argument list
+        if (!argString.trim()) return [];
+
         const args = [];
         let current = '';
         let braceDepth = 0;
+        let bracketDepth = 0;
         let parenDepth = 0;
         let quote = null;
+        let escapeNext = false;
 
         for (let i = 0; i < argString.length; i++) {
             const char = argString[i];
 
-            if (char === ',' && braceDepth === 0 && parenDepth === 0 && quote === null) {
-                if (current.trim()) {
-                    args.push(current.trim());
-                }
-                current = '';
+            if (escapeNext) {
+                current += char;
+                escapeNext = false;
                 continue;
             }
 
-            if (char === '{' && quote === null) braceDepth++;
-            if (char === '}' && quote === null) braceDepth--;
-            if (char === '(' && quote === null) parenDepth++;
-            if (char === ')' && quote === null) parenDepth--;
+            if (char === '\\') {
+                escapeNext = true;
+                continue;
+            }
 
-            if (char === '\'' || char === '"') {
+            if (char === '"' || char === "'") {
                 if (quote === char) {
                     quote = null;
                 } else if (quote === null) {
                     quote = char;
+                }
+                current += char;
+                continue;
+            }
+            
+            if (quote === null) {
+                if (char === '{') braceDepth++;
+                if (char === '}') braceDepth--;
+                if (char === '[') bracketDepth++;
+                if (char === ']') bracketDepth--;
+                if (char === '(') parenDepth++;
+                if (char === ')') parenDepth--;
+
+                if (char === ',' && braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+                    if (current.trim()) {
+                        args.push(this.cleanArgument(current.trim()));
+                    }
+                    current = '';
+                    continue;
                 }
             }
             
@@ -378,10 +565,19 @@ export class GraphParser {
         }
 
         if (current.trim()) {
-            args.push(current.trim());
+            args.push(this.cleanArgument(current.trim()));
         }
 
         return args;
+    }
+
+    cleanArgument(arg) {
+        // Remove surrounding quotes if present
+        if ((arg.startsWith("'") && arg.endsWith("'")) || 
+            (arg.startsWith('"') && arg.endsWith('"'))) {
+            return arg.slice(1, -1);
+        }
+        return arg;
     }
 
     splitPipeline(line) {
@@ -392,13 +588,26 @@ export class GraphParser {
         const parts = [];
         let current = '';
         let braceDepth = 0;
+        let bracketDepth = 0;
         let parenDepth = 0;
         let quote = null;
+        let escapeNext = false;
         
         for (let i = 0; i < line.length; i++) {
             const char = line[i];
-            
-            if (char === '\'' || char === '"') {
+
+            if (escapeNext) {
+                current += char;
+                escapeNext = false;
+                continue;
+            }
+
+            if (char === '\\') {
+                escapeNext = true;
+                continue;
+            }
+
+            if (char === '"' || char === "'") {
                 if (quote === char) {
                     quote = null;
                 } else if (quote === null) {
@@ -409,11 +618,13 @@ export class GraphParser {
             if (quote === null) {
                 if (char === '{') braceDepth++;
                 if (char === '}') braceDepth--;
+                if (char === '[') bracketDepth++;
+                if (char === ']') bracketDepth--;
                 if (char === '(') parenDepth++;
                 if (char === ')') parenDepth--;
             }
             
-            if (char === '|' && braceDepth === 0 && parenDepth === 0 && quote === null) {
+            if (char === '|' && braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 && quote === null) {
                 if (current.trim()) {
                     parts.push(current.trim());
                 }
@@ -431,8 +642,90 @@ export class GraphParser {
     }
 
     isTerminalOperator(operatorName) {
-        return operatorName === 'to_pool' || 
-               operatorName === 'print' || 
-               operatorName === 'ui_render';
+        const terminalOps = ['to_pool', 'print', 'ui_render', 'write_file', 'RESULT'];
+        return terminalOps.includes(operatorName);
+    }
+
+    isValidIdentifier(name) {
+        return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
+    }
+
+    inferType(value) {
+        if (value === 'null') return 'null';
+        if (value === 'true' || value === 'false') return 'boolean';
+        if (!isNaN(value) && value.trim() !== '') return 'number';
+        if ((value.startsWith("'") && value.endsWith("'")) || 
+            (value.startsWith('"') && value.endsWith('"'))) return 'string';
+        if (value.startsWith('[') && value.endsWith(']')) return 'array';
+        if (value.startsWith('{') && value.endsWith('}')) return 'object';
+        return 'any';
+    }
+
+    validateAST(ast) {
+        const warnings = [];
+        
+        // Check for unused pools
+        Object.keys(ast.pools).forEach(poolName => {
+            const usedInSubscriptions = ast.nodes.some(node => 
+                node.type === 'POOL_READ' && node.value === poolName
+            );
+            if (!usedInSubscriptions) {
+                warnings.push(`Pool '${poolName}' is declared but never used`);
+            }
+        });
+
+        // Check for disconnected nodes
+        const connectedNodes = new Set();
+        ast.connections.forEach(conn => {
+            connectedNodes.add(conn.from);
+            connectedNodes.add(conn.to);
+        });
+        
+        ast.nodes.forEach(node => {
+            if (!connectedNodes.has(node.id) && node.type !== 'STREAM_SOURCE_FINITE' && node.type !== 'STREAM_SOURCE_LIVE') {
+                warnings.push(`Node '${node.name}' (line ${node.line}) is disconnected from the flow`);
+            }
+        });
+
+        if (warnings.length > 0 && this.debugMode) {
+            console.log('🔍 Parser Validation Warnings:');
+            warnings.forEach(warning => console.log(`   ⚠️ ${warning}`));
+        }
+
+        return warnings;
+    }
+
+    logParseInfo(lineNum, message) {
+        if (this.debugMode) {
+            console.log(`📝 [Line ${lineNum}] ${message}`);
+        }
+    }
+
+    logParseWarning(lineNum, message) {
+        console.log(`⚠️ [Line ${lineNum}] ${message}`);
+    }
+
+    logParseError(lineNum, line, message) {
+        console.error(`❌ [Line ${lineNum}] Parse Error: ${message}`);
+        console.error(`   Code: ${line}`);
+    }
+
+    // Utility method for debugging
+    printASTSummary(ast) {
+        console.log('\n📊 Parser Summary:');
+        console.log(`   📝 Lines processed: ${ast.metadata.sourceLines}`);
+        console.log(`   📦 Nodes created: ${ast.nodes.length}`);
+        console.log(`   🔗 Connections: ${ast.connections.length}`);
+        console.log(`   🏊 Pools: ${Object.keys(ast.pools).length}`);
+        console.log(`   📚 Imports: ${ast.imports.length}`);
+        console.log(`   🔄 Live streams: ${ast.liveStreams.length}`);
+        console.log(`   ⏹️ Finite streams: ${ast.finiteStreams.length}`);
+        
+        // Node type breakdown
+        const nodeTypes = {};
+        ast.nodes.forEach(node => {
+            nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1;
+        });
+        console.log(`   🎯 Node types:`, nodeTypes);
     }
 }

@@ -1,24 +1,55 @@
 // FILENAME: src/core/engine.js
-// Fluxus Language Runtime Engine v10.2 - PRODUCTION STABLE
+// Fluxus Language Runtime Engine v11.2 - REPL COMPATIBLE
 
 import { FluxusPackageManager } from '../package-manager.js';
 import { FluxusLibraryLoader } from '../lib/hybrid-loader.js';
 
-// STANDARD OPERATORS - MUST BE DEFINED FIRST
+// ==================== CORE LANGUAGE PRIMITIVES ====================
+
+/**
+ * Fluxus Value System - Clean value wrapper
+ */
+class FluxusValue {
+    constructor(value, metadata = {}) {
+        this.value = value;
+        this.metadata = {
+            type: this._detectType(value),
+            timestamp: Date.now(),
+            source: metadata.source || 'unknown',
+            ...metadata
+        };
+    }
+
+    _detectType(value) {
+        if (value === null) return 'null';
+        if (value === undefined) return 'undefined';
+        if (Array.isArray(value)) return 'array';
+        if (typeof value === 'object') return 'object';
+        return typeof value;
+    }
+
+    equals(other) {
+        return JSON.stringify(this.value) === JSON.stringify(other?.value ?? other);
+    }
+
+    clone() {
+        return new FluxusValue(
+            JSON.parse(JSON.stringify(this.value)),
+            { ...this.metadata, timestamp: Date.now() }
+        );
+    }
+}
+
+// ==================== CLEAN STANDARD OPERATORS ====================
+
 const STANDARD_OPERATORS = {
-    'print': (input, args) => { 
-        let output;
-        
-        if (args && args.length > 0) {
-             const prefix = args[0];
-             output = `${prefix}${input}`;
-        } else {
-            output = typeof input === 'object' ? JSON.stringify(input, null, 2) : String(input);
-        }
-        
+    // Core I/O
+    'print': (input, args, context) => {
+        const output = args.length > 0 ? `${args[0]}${input}` : String(input);
         console.log(`✅ Fluxus Output: ${output}`);
         return input;
     },
+
     'to_pool': (input, args, context) => {
         if (!args || args.length === 0) {
             throw new Error('to_pool requires a pool name as an argument.');
@@ -26,154 +57,155 @@ const STANDARD_OPERATORS = {
         context.engine.updatePool(args[0], input);
         return input;
     },
-    'ui_render': (input, args) => { 
+
+    'ui_render': (input, args) => {
         const targetSelector = args && args.length > 0 ? args[0] : 'undefined_target';
-        console.log(`[UI_RENDER] Rendering to ${targetSelector} with data:`, input); 
-        return input; 
+        console.log(`[UI_RENDER] Rendering to ${targetSelector} with data:`, input);
+        return input;
     },
+
+    // Mathematical operators
     'add': (input, args) => {
-        const result = args.reduce((acc, arg) => acc + parseFloat(arg), parseFloat(input));
-        return result;
+        return args.reduce((acc, arg) => acc + parseFloat(arg), parseFloat(input));
     },
+
     'multiply': (input, args) => {
-        const result = args.reduce((acc, arg) => acc * parseFloat(arg), parseFloat(input));
-        return result;
+        return args.reduce((acc, arg) => acc * parseFloat(arg), parseFloat(input));
     },
+
     'subtract': (input, args) => {
         let result = parseFloat(input);
-        args.forEach(arg => {
-            result -= parseFloat(arg);
-        });
+        args.forEach(arg => { result -= parseFloat(arg); });
         return result;
     },
+
     'divide': (input, args) => {
         let result = parseFloat(input);
-        args.forEach(arg => {
-            result /= parseFloat(arg);
-        });
+        args.forEach(arg => { result /= parseFloat(arg); });
         return result;
     },
-    'trim': (input, args) => {
-        return String(input).trim();
+
+    // String operators
+    'trim': (input) => String(input).trim(),
+    'to_upper': (input) => String(input).toUpperCase(),
+    'to_lower': (input) => String(input).toLowerCase(),
+
+    // Collection operators
+    'map': (input, args, context) => {
+        if (Array.isArray(input)) {
+            return input.map(item => context.engine.executeLens(item, args[0]));
+        }
+        return input;
     },
+
+    'reduce': (input, args, context) => {
+        if (Array.isArray(input) && args[0] === '+') {
+            return input.reduce((acc, curr) => acc + curr, 0);
+        }
+        return input;
+    },
+
+    'filter': (input, args, context) => {
+        if (Array.isArray(input)) {
+            return input.filter(item => {
+                const result = context.engine.executeLensOperation(item, args[0]);
+                return Boolean(result);
+            });
+        }
+        return input;
+    },
+
+    // Reactive operators
+    'combine_latest': (input, args, context) => {
+        const poolValues = {};
+        args.forEach(poolName => {
+            const cleanName = poolName.replace(/_pool$/, '');
+            poolValues[cleanName] = context.engine.pools[poolName]?.value;
+        });
+
+        return {
+            click_event: input,
+            username: poolValues.username || 'testuser',
+            password: poolValues.password || 'testpass'
+        };
+    },
+
+    // Network operators
+    'fetch_url': (input) => ({
+        status_code: 200,
+        body: {
+            user_data: { id: 101, username: input.username },
+            session_token: 'MOCK_TOKEN_ABC123',
+            message: 'Login successful'
+        }
+    }),
+
+    'split': (input) => {
+        const isTrue = input.status_code === 200;
+        return { isTrue: isTrue, data: input };
+    },
+
+    'hash_sha256': (input) => `SHA256(${input})`,
+
     'break': (input, args) => {
         const delimiter = args && args.length > 0 ? args[0] : ' ';
         return String(input).split(delimiter);
     },
-    'concat': (input, args) => {
-        return String(input) + args.join('');
-    },
-    'to_upper': (input, args) => {
-        return String(input).toUpperCase();
-    },
-    'to_lower': (input, args) => {
-        return String(input).toLowerCase();
-    },
-    'double': (input, args) => {
-        return parseFloat(input) * 2;
-    },
-    'add_five': (input, args) => {
-        return parseFloat(input) + 5;
-    },
-    'square': (input, args) => {
-        return parseFloat(input) * parseFloat(input);
-    },
-    'detect_steps': (input, args) => {
-        return Math.floor(Math.random() * 3);
-    },
-    'detect_mock_steps': (input, args) => {
-        return Math.floor(Math.random() * 5);
-    },
-    'calculate_magnitude': (input, args) => {
-        return Math.sqrt(
-            Math.pow(input.x || 0, 2) + 
-            Math.pow(input.y || 0, 2) + 
-            Math.pow(input.z || 0, 2)
-        );
-    },
-    'map': (input, args, context) => {
-        if (Array.isArray(input)) {
-            return input.map(item => {
-                if (args && args[0]) {
-                    return context.engine.executeLens(item, args[0]);
-                }
-                return item;
-            });
-        }
-        return input;
-    },
-    'reduce': (input, args, context) => {
-        if (Array.isArray(input)) {
-            if (args && args[0] === '+') {
-                return input.reduce((acc, curr) => acc + curr, 0);
-            }
-        }
-        return input;
-    },
-    'filter': (input, args, context) => {
-        if (Array.isArray(input)) {
-            return input.filter(item => {
-                if (args && args[0]) {
-                    const result = context.engine.executeLensOperation(item, args[0]);
-                    return Boolean(result);
-                }
-                return true;
-            });
-        }
-        return input;
-    },
-    'combine_latest': (input, args, context) => {
-        const poolValues = {};
-        args.forEach(poolName => {
-            const cleanName = poolName.replace(/_pool$/, ''); 
-            poolValues[cleanName] = context.engine.pools[poolName]?.value;
-        });
 
-        if (poolValues.username === '') poolValues.username = 'testuser';
-        if (poolValues.password === '') poolValues.password = 'testpass';
-        
-        return { 
-            click_event: input, 
-            username: poolValues.username, 
-            password: poolValues.password 
-        };
-    },
-    'hash_sha256': (input) => { 
-        return `SHA256(${input})`; 
-    },
-    'fetch_url': (input) => { 
-        return { 
-            status_code: 200, 
-            body: { 
-                user_data: { id: 101, username: input.username }, 
-                session_token: 'MOCK_TOKEN_ABC123',
-                message: 'Login successful'
-            } 
-        }; 
-    },
-    'split': (input) => {
-        const isTrue = input.status_code === 200;
-        return { isTrue: isTrue, data: input };
-    }
+    'concat': (input, args) => String(input) + args.join(''),
+
+    'double': (input) => parseFloat(input) * 2,
+
+    'add_five': (input) => parseFloat(input) + 5,
+
+    'square': (input) => parseFloat(input) * parseFloat(input),
+
+    'detect_steps': (input) => Math.floor(Math.random() * 3),
+
+    'detect_mock_steps': (input) => Math.floor(Math.random() * 5),
+
+    'calculate_magnitude': (input) => Math.sqrt(
+        Math.pow(input.x || 0, 2) +
+        Math.pow(input.y || 0, 2) +
+        Math.pow(input.z || 0, 2)
+    )
 };
 
+// ==================== REPL-COMPATIBLE RUNTIME ENGINE ====================
+
 export class RuntimeEngine {
-    constructor() {
+    constructor(config = {}) {
+        // Core state management
         this.pools = {};
         this.subscriptions = {};
-        this.liveStreams = [];
         this.ast = null;
-        this.debugMode = false;
-        this.operators = { ...STANDARD_OPERATORS }; // Initialize with standard operators
-        this.packageManager = new FluxusPackageManager(); 
+        this.replMode = config.replMode || false;
+        
+        // Configuration - CLEAN OUTPUT BY DEFAULT
+        this.debugMode = config.debugMode || false;
+        this.logLevel = config.logLevel || 'ERROR'; // Only errors by default
+        this.quietMode = config.quietMode !== false; // Quiet by default
+        this.performanceTracking = config.performanceTracking !== false;
+        
+        // Systems
+        this.operators = { ...STANDARD_OPERATORS };
+        this.packageManager = new FluxusPackageManager();
         this.libraryLoader = new FluxusLibraryLoader(this);
         this.loadedLibraries = new Set();
-        this.logLevel = 'INFO';
-        this.replMode = false;
-        this.realStreams = new Map();
-        
+
+        // Performance tracking
+        this.performance = {
+            totalOperatorCalls: 0,
+            startTime: Date.now(),
+            uptime: 0
+        };
+
         // Initialize core libraries immediately
         this.initializeCoreLibraries();
+
+        if (!this.replMode && !this.quietMode) {
+            this.cleanOutput('🚀 Fluxus Engine Initialized');
+        }
     }
 
     async initializeCoreLibraries() {
@@ -183,10 +215,112 @@ export class RuntimeEngine {
             try {
                 await this.importLibrary(libName);
             } catch (error) {
-                console.warn(`⚠️ Could not load core library: ${libName}`, error.message);
+                // Silent fail for core libraries
             }
         }
     }
+
+    // ==================== REPL-REQUIRED METHODS ====================
+
+    getEngineStats() {
+        const poolStats = {};
+        Object.keys(this.pools).forEach(poolName => {
+            const pool = this.pools[poolName];
+            poolStats[poolName] = {
+                value: pool.value,
+                updates: pool._updates || 0,
+                subscribers: pool.subscriptions?.size || 0,
+                historySize: pool.history?.length || 0
+            };
+        });
+
+        return {
+            pools: Object.keys(this.pools).length,
+            operators: Object.keys(this.operators).length,
+            libraries: this.loadedLibraries.size,
+            poolsDetail: poolStats,
+            loadedLibraries: Array.from(this.loadedLibraries),
+            performance: {
+                totalOperatorCalls: this.performance.totalOperatorCalls,
+                uptime: Date.now() - this.performance.startTime
+            },
+            memory: {
+                pools: Object.keys(this.pools).length,
+                subscriptions: Object.values(this.pools).reduce((acc, pool) => 
+                    acc + (pool.subscriptions?.size || 0), 0),
+                liveStreams: 0, // Placeholder for stream tracking
+                statefulOperators: Object.values(this.operators).filter(op => 
+                    typeof op === 'object' && op.config?.stateful).length
+            }
+        };
+    }
+
+    // ==================== CLEAN OUTPUT SYSTEM ====================
+
+    cleanOutput(message, data = null) {
+        if (this.quietMode) return;
+        
+        // Clean, user-friendly output without JSON timestamps
+        if (message.includes('Initialized')) {
+            console.log(`⚛️ ${message}`);
+        } else if (message.includes('Loading')) {
+            console.log(`📚 ${message}`);
+        } else if (message.includes('Loaded')) {
+            console.log(`   📊 ${message}`);
+        } else if (message.includes('Linking') || message.includes('Activating') || message.includes('Running')) {
+            console.log(`   * ${message}`);
+        } else if (message.includes('Activated')) {
+            if (data) {
+                console.log(`✅ ${message}`, data);
+            } else {
+                console.log(`✅ ${message}`);
+            }
+        } else if (message.includes('Fluxus Output:')) {
+            console.log(message);
+        } else {
+            console.log(message);
+        }
+    }
+
+    log(level, message, metadata = {}) {
+        // In quiet mode, only show program output and critical errors
+        if (this.quietMode) {
+            if (message.includes('✅ Fluxus Output:')) {
+                console.log(message);
+            } else if (level === 'ERROR') {
+                console.error(`❌ Fluxus Error: ${message}`);
+                if (metadata.error) {
+                    console.error(`   Details: ${metadata.error}`);
+                }
+            }
+            return;
+        }
+        
+        // In debug mode, show everything with clean formatting
+        if (this.debugMode) {
+            this.cleanOutput(`${level}: ${message}`, metadata);
+            return;
+        }
+        
+        // Normal mode: show errors and important info cleanly
+        const levels = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
+        if (levels[level] >= levels[this.logLevel]) {
+            if (level === 'ERROR') {
+                console.error(`❌ ${message}`);
+                if (metadata.error) {
+                    console.error(`   Details: ${metadata.error}`);
+                }
+            } else if (level === 'WARN') {
+                console.log(`⚠️ ${message}`);
+            } else if (message.includes('✅ Fluxus Output:')) {
+                console.log(message);
+            } else {
+                this.cleanOutput(message, metadata);
+            }
+        }
+    }
+
+    // ==================== LIBRARY SYSTEM ====================
 
     async importLibrary(libraryName) {
         if (this.loadedLibraries.has(libraryName)) {
@@ -206,112 +340,95 @@ export class RuntimeEngine {
                 });
                 
                 this.loadedLibraries.add(libraryName);
-                
-                if (this.debugMode) {
-                    const opCount = Object.keys(libraryOperators).length;
-                    console.log(`📚 Library registered: ${libraryName} (${opCount} operators)`);
-                }
-                
                 return true;
-            } else {
-                console.log(`   ⚠️ No operators found in library: ${libraryName}`);
-                return false;
             }
+            return false;
             
         } catch (error) {
-            console.error(`❌ Failed to import library ${libraryName}:`, error.message);
+            if (!this.quietMode) {
+                this.log('ERROR', `Failed to import library`, { library: libraryName, error: error.message });
+            }
             return false;
         }
     }
 
     async handleFlowImport(flowName) {
         const libraryMap = {
-            'ui': 'dom',
-            'network': 'http',
-            'crypto': 'crypto',
-            'sensors': 'sensors',
-            'math': 'math',
-            'time': 'time',
-            'text': 'string'
+            'ui': 'ui', 'network': 'http', 'crypto': 'crypto', 'sensors': 'sensors',
+            'math': 'math', 'time': 'time', 'text': 'string', 'data': 'data',
+            'streams': 'streams', 'aggregators': 'aggregators', 'reactive': 'reactive'
         };
         
         const libraryName = libraryMap[flowName] || flowName;
         return await this.importLibrary(libraryName);
     }
 
-    log(level, message) {
-        const levels = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
-        if (levels[level] >= levels[this.logLevel]) {
-            console.log(message);
-        }
-    }
-
-    startRepl(ast) {
-        this.replMode = true;
-        this.start(ast);
-    }
+    // ==================== EXECUTION ENGINE ====================
 
     async start(ast) {
+        const startTime = Date.now();
         this.ast = ast;
         
-        // 🎯 CRITICAL FIX: Load imports BEFORE execution
-        if (ast.imports && ast.imports.length > 0) {
-            if (!this.replMode) {
-                console.log('\n📦 Loading libraries...');
+        try {
+            if (!this.quietMode && !this.replMode) {
+                this.cleanOutput('🚀 Executing Fluxus Program...');
             }
-            for (const importName of ast.imports) {
-                await this.handleFlowImport(importName);
+            
+            // 🎯 CRITICAL FIX: Load imports BEFORE execution
+            if (ast.imports && ast.imports.length > 0) {
+                for (const importName of ast.imports) {
+                    await this.handleFlowImport(importName);
+                }
             }
-        }
-        
-        this.loadAllOperators();
-        this.initializePools();
-        this.linkSubscriptions();
-        this.activateLiveStreams();
-        this.runFiniteStreams();
-        
-        if (!this.replMode) {
-            const libs = this.getLoadedLibraries().join(', ');
-            this.log('INFO', `\n✅ Fluxus Runtime Activated. Libraries: ${libs || 'none'}`);
+            
+            // 🎯 CRITICAL FIX: Load all operators
+            this.loadAllOperators();
+            
+            // 🎯 CRITICAL FIX: Initialize and execute
+            this.initializePools();
+            this.linkSubscriptions();
+            this.runFiniteStreams();
+            
+            const executionTime = Date.now() - startTime;
+            const libs = this.getLoadedLibraries().length;
+            const totalOps = Object.keys(this.operators).length;
+            
+            if (!this.quietMode && !this.replMode) {
+                this.cleanOutput('✅ Fluxus Runtime Activated', {
+                    executionTime: `${executionTime}ms`,
+                    libraries: libs,
+                    operators: totalOps,
+                    pools: Object.keys(this.pools).length
+                });
+            }
+            
+        } catch (error) {
+            this.log('ERROR', 'Failed to start engine', { error: error.message });
+            throw error;
         }
     }
 
     loadAllOperators() {
         const packageOperators = this.packageManager.getInstalledOperators();
-        this.operators = { ...STANDARD_OPERATORS, ...this.operators, ...packageOperators };
-        
-        if (this.debugMode) {
-            this.log('DEBUG', `📦 Loaded ${Object.keys(packageOperators).length} package operators`);
-            this.log('DEBUG', `📚 Loaded ${this.loadedLibraries.size} libraries`);
-            this.log('DEBUG', `🔧 Loaded ${Object.keys(STANDARD_OPERATORS).length} standard operators`);
-        }
+        this.operators = { ...this.operators, ...packageOperators };
     }
 
     initializePools() {
-        if (!this.ast.pools) return;
+        if (!this.ast || !this.ast.pools) return;
         
         for (const poolName in this.ast.pools) {
             const poolDef = this.ast.pools[poolName];
             try {
                 let initialValue = this.parseLiteralValue(poolDef.initial);
                 
-                if (this.replMode && this.pools[poolName]) {
-                    this.log('DEBUG', `   * Preserving existing pool '${poolName}' with value: ${this.pools[poolName].value}`);
-                    continue;
-                }
-                
                 this.pools[poolName] = {
-                    value: initialValue, 
+                    value: initialValue,
                     subscriptions: new Set(),
-                    history: [initialValue], 
+                    history: [initialValue],
                     _updates: 0
                 };
                 
-                if (this.debugMode) {
-                    this.log('DEBUG', `   * Initialized pool '${poolName}' = ${initialValue}`);
-                }
             } catch (error) {
-                this.log('ERROR', `❌ Failed to initialize pool '${poolName}': ${error.message}`);
                 this.pools[poolName] = {
                     value: null,
                     subscriptions: new Set(),
@@ -323,22 +440,18 @@ export class RuntimeEngine {
         }
         
         // Initialize default pools if they don't exist
-        if (!this.replMode || !this.pools['username_pool']) {
+        if (!this.pools['username_pool']) {
             this.pools['username_pool'] = { value: '', subscriptions: new Set(), history: [''], _updates: 0 };
         }
-        if (!this.replMode || !this.pools['password_pool']) {
+        if (!this.pools['password_pool']) {
             this.pools['password_pool'] = { value: '', subscriptions: new Set(), history: [''], _updates: 0 };
-        }
-        
-        if (!this.replMode) {
-            this.log('INFO', `   * Initialized ${Object.keys(this.pools).length} Tidal Pools.`);
         }
     }
 
     updatePool(poolName, newValue) {
         const pool = this.pools[poolName];
         if (!pool) {
-            this.log('ERROR', `❌ Pool not found: ${poolName}`);
+            this.log('ERROR', 'Pool not found', { pool: poolName });
             return;
         }
 
@@ -348,27 +461,28 @@ export class RuntimeEngine {
             pool._updates = (pool._updates || 0) + 1;
             pool.history.push(newValue);
             
-            if (this.replMode) {
-                console.log(`🔄 Updated pool '${poolName}' to ${this.formatValueForDisplay(newValue)}`);
-            } else {
-                this.log('INFO', `🔄 Updated pool '${poolName}' to ${this.formatValueForDisplay(newValue)}`);
+            if (pool.history.length > 1000) {
+                pool.history = pool.history.slice(-1000);
             }
-            
-            pool.subscriptions.forEach(subscriptionNodeId => {
-                const startNode = this.ast.nodes.find(n => n.id === subscriptionNodeId);
-                this.runPipeline(startNode.id, pool.value); 
-            });
+
+            this.notifySubscribers(poolName, newValue);
         }
     }
 
-    formatValueForDisplay(value) {
-        if (Array.isArray(value)) {
-            return `[${value.slice(0, 3).join(', ')}${value.length > 3 ? '...' : ''}]`;
-        }
-        if (typeof value === 'object' && value !== null) {
-            return JSON.stringify(value).substring(0, 50) + (JSON.stringify(value).length > 50 ? '...' : '');
-        }
-        return String(value);
+    notifySubscribers(poolName, newValue) {
+        const pool = this.pools[poolName];
+        if (!pool || !pool.subscriptions) return;
+
+        pool.subscriptions.forEach(subscriptionNodeId => {
+            try {
+                const startNode = this.ast.nodes.find(n => n.id === subscriptionNodeId);
+                if (startNode) {
+                    this.runPipeline(startNode.id, newValue);
+                }
+            } catch (error) {
+                this.log('ERROR', 'Subscription notification failed', { pool: poolName, error: error.message });
+            }
+        });
     }
 
     // 🎯 CRITICAL FIX: Enhanced stream execution
@@ -377,27 +491,15 @@ export class RuntimeEngine {
         let currentData = initialData;
         
         if (!currentNode) {
-            this.log('ERROR', `❌ Pipeline node not found: ${startNodeId}`);
+            this.log('ERROR', 'Pipeline node not found', { node: startNodeId });
             return;
         }
         
         let step = 0;
         
-        if (this.debugMode) {
-            const nodeType = currentNode.type === 'POOL_READ' ? 'Reactive Subscription' : 'Stream';
-            this.log('DEBUG', `   * Executing ${nodeType} Pipeline from: ${currentNode.value}`);
-        }
-        
-        while (currentNode) {
+        while (currentNode && step < 1000) {
             step++;
             
-            if (currentNode.type !== 'POOL_READ' && currentNode.type !== 'STREAM_SOURCE_LIVE' && currentNode.type !== 'STREAM_SOURCE_FINITE') {
-                const lineInfo = currentNode.line ? `Line ${currentNode.line}: ` : '';
-                if (this.debugMode) {
-                    this.log('DEBUG', `     -> [STEP ${step}] ${lineInfo}${currentNode.name}`);
-                }
-            }
-
             if (currentNode.type === 'FUNCTION_OPERATOR' || currentNode.type === 'LENS_OPERATOR') {
                 
                 let cleanOperatorName = currentNode.name;
@@ -417,13 +519,14 @@ export class RuntimeEngine {
                     try {
                         const impl = typeof operator === 'function' ? operator : (operator.implementation || operator);
                         currentData = impl(currentData, effectiveArgs, { engine: this });
-                        
-                        if (this.debugMode) {
-                            this.log('DEBUG', `       Result: ${this.formatValueForDisplay(currentData)}`);
-                        }
+                        this.performance.totalOperatorCalls++;
                     } catch (error) {
-                        this.log('ERROR', `❌ Operator Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
-                        return; 
+                        this.log('ERROR', 'Operator execution failed', {
+                            operator: cleanOperatorName,
+                            line: currentNode.line,
+                            error: error.message
+                        });
+                        return;
                     }
                 } else if (currentNode.type === 'LENS_OPERATOR') {
                     try {
@@ -436,20 +539,22 @@ export class RuntimeEngine {
                         } else if (cleanOperatorName === 'split') {
                             currentData = this.executeSplit(currentData, effectiveArgs[0]);
                         }
+                        this.performance.totalOperatorCalls++;
                     } catch (error) {
-                        this.log('ERROR', `❌ Lens Error on line ${currentNode.line} (${cleanOperatorName}): ${error.message}`);
+                        this.log('ERROR', 'Lens execution failed', {
+                            lens: cleanOperatorName,
+                            line: currentNode.line,
+                            error: error.message
+                        });
                         return;
                     }
                 } else {
-                    this.log('ERROR', `❌ Unknown Operator: ${currentNode.name} on line ${currentNode.line}`);
+                    this.log('ERROR', 'Unknown operator', { operator: currentNode.name, line: currentNode.line });
                     return;
                 }
-            } 
+            }
             
             if (currentNode.isTerminal) {
-                if (this.debugMode) {
-                    this.log('DEBUG', `     -> [TERMINAL] Pipeline completed`);
-                }
                 break;
             }
             
@@ -458,24 +563,24 @@ export class RuntimeEngine {
             if (currentNode.name === 'split') {
                 let branchName = currentData.isTrue ? 'TRUE_FLOW' : 'FALSE_FLOW';
                 
-                let flowConn = this.ast.connections.find(c => 
-                    c.from === currentNode.id && 
-                    this.ast.nodes.find(n => n.id === c.to).name === branchName
+                let flowConn = this.ast.connections.find(c =>
+                    c.from === currentNode.id &&
+                    this.ast.nodes.find(n => n.id === c.to)?.name === branchName
                 );
                 
                 nextConnection = flowConn;
-                currentData = currentData.data; 
+                currentData = currentData.data;
             }
             
             currentNode = nextConnection ? this.ast.nodes.find(n => n.id === nextConnection.to) : null;
             
-            if (currentNode && currentNode.name && 
-                (currentNode.name.startsWith('to_pool(') || 
-                 currentNode.name.startsWith('print(') || 
+            if (currentNode && currentNode.name &&
+                (currentNode.name.startsWith('to_pool(') ||
+                 currentNode.name.startsWith('print(') ||
                  currentNode.name.startsWith('ui_render('))) {
                 
                 let sinkName = currentNode.name;
-                let effectiveArgs = currentNode.args || []; 
+                let effectiveArgs = currentNode.args || [];
                 
                 const sinkParenIndex = currentNode.name.indexOf('(');
                 if (sinkParenIndex !== -1) {
@@ -493,6 +598,41 @@ export class RuntimeEngine {
             }
         }
     }
+
+    linkSubscriptions() {
+        if (!this.ast || !this.ast.nodes) return;
+        
+        const subscriptionNodes = this.ast.nodes.filter(n => n.type === 'POOL_READ');
+        
+        if (!this.quietMode && !this.replMode && subscriptionNodes.length > 0) {
+            this.cleanOutput(`   * Linking ${subscriptionNodes.length} Reactive Subscription${subscriptionNodes.length !== 1 ? 's' : ''}...`);
+        }
+        
+        subscriptionNodes.forEach(node => {
+            const poolName = node.value.replace(' ->', '');
+            if (this.pools[poolName]) {
+                this.pools[poolName].subscriptions.add(node.id);
+                this.runPipeline(node.id, this.pools[poolName].value);
+            }
+        });
+    }
+
+    runFiniteStreams() {
+        if (!this.ast || !this.ast.nodes) return;
+        
+        const finiteStreams = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_FINITE');
+        
+        if (!this.quietMode && !this.replMode && finiteStreams.length > 0) {
+            this.cleanOutput(`   * Running ${finiteStreams.length} Finite Stream${finiteStreams.length !== 1 ? 's' : ''}...`);
+        }
+        
+        finiteStreams.forEach(streamNode => {
+            const initialData = this.parseLiteralValue(streamNode.value);
+            this.runPipeline(streamNode.id, initialData);
+        });
+    }
+
+    // ==================== UTILITIES ====================
 
     extractArgsFromMalformedName(name) {
         const openParenIndex = name.indexOf('(');
@@ -522,26 +662,14 @@ export class RuntimeEngine {
     }
 
     executeLens(inputData, lensExpression) {
-        if (typeof inputData === 'string' && inputData.includes(',')) {
-            try {
-                const parsedArray = inputData.split(',').map(item => parseFloat(item.trim()));
-                if (parsedArray.every(item => !isNaN(item))) {
-                    inputData = parsedArray;
-                }
-            } catch (e) {}
-        }
-        
         if (Array.isArray(inputData)) {
-            const result = inputData.map(item => this.executeLensOperation(item, lensExpression));
-            return result;
+            return inputData.map(item => this.executeLensOperation(item, lensExpression));
         }
-        
         return this.executeLensOperation(inputData, lensExpression);
     }
 
     executeLensOperation(item, lensExpression) {
         const steps = lensExpression.split('|').map(step => step.trim());
-        
         let result = item;
         
         for (const step of steps) {
@@ -559,41 +687,15 @@ export class RuntimeEngine {
                     const addend = parseFloat(argMatch[1]);
                     result = parseFloat(result) + addend;
                 }
-            } else if (step.startsWith('subtract(')) {
-                const argMatch = step.match(/subtract\((\d+)\)/);
-                if (argMatch) {
-                    const subtrahend = parseFloat(argMatch[1]);
-                    result = parseFloat(result) - subtrahend;
-                }
-            } else if (step.startsWith('double(')) {
-                result = parseFloat(result) * 2;
-            } else if (step.startsWith('add_five(')) {
-                result = parseFloat(result) + 5;
             }
         }
-        
         return result;
     }
 
     executeReduce(inputData, lensExpression) {
-        if (typeof inputData === 'string' && inputData.includes(',')) {
-            try {
-                const parsedArray = inputData.split(',').map(item => parseFloat(item.trim()));
-                if (parsedArray.every(item => !isNaN(item))) {
-                    inputData = parsedArray;
-                }
-            } catch (e) {}
+        if (Array.isArray(inputData) && lensExpression === '+') {
+            return inputData.reduce((acc, curr) => acc + curr, 0);
         }
-        
-        if (!Array.isArray(inputData)) {
-            return inputData;
-        }
-        
-        if (lensExpression === '+') {
-            const result = inputData.reduce((acc, curr) => acc + curr, 0);
-            return result;
-        }
-        
         return inputData;
     }
 
@@ -621,49 +723,6 @@ export class RuntimeEngine {
             }
         }
         return { isTrue: false, data: inputData };
-    }
-    
-    linkSubscriptions() {
-        const subscriptionNodes = this.ast.nodes.filter(n => n.type === 'POOL_READ');
-        subscriptionNodes.forEach(node => {
-            const poolName = node.value.replace(' ->', ''); 
-            if (this.pools[poolName]) {
-                this.pools[poolName].subscriptions.add(node.id);
-                this.runPipeline(node.id, this.pools[poolName].value); 
-            }
-        });
-        
-        if (!this.replMode) {
-            this.log('INFO', `   * Linking ${subscriptionNodes.length} Reactive Subscription...`);
-        }
-    }
-
-    activateLiveStreams() {
-        const liveSources = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_LIVE');
-        
-        if (this.debugMode) {
-            this.log('DEBUG', `   * Found ${liveSources.length} live stream sources`);
-        }
-        
-        if (!this.replMode) {
-            this.log('INFO', `   * Activating ${liveSources.length} Live Streams...`);
-        }
-    }
-
-    runFiniteStreams() {
-        const finiteStreams = this.ast.nodes.filter(n => n.type === 'STREAM_SOURCE_FINITE');
-        
-        if (!this.replMode) {
-            this.log('INFO', `   * Running ${finiteStreams.length} Finite Streams...`);
-        }
-        
-        finiteStreams.forEach(streamNode => {
-            if (this.debugMode) {
-                this.log('DEBUG', `   * Executing finite stream: ${streamNode.value}`);
-            }
-            const initialData = this.parseLiteralValue(streamNode.value);
-            this.runPipeline(streamNode.id, initialData);
-        });
     }
 
     parseLiteralValue(value) {
@@ -699,23 +758,25 @@ export class RuntimeEngine {
         return value;
     }
 
-    isRealStreamSource(source) {
-        return source.value && source.value.includes('sensors.') && this.realStreams.has(source.value);
-    }
-
-    activateRealStream(source) {
-        if (this.debugMode) {
-            this.log('DEBUG', `   * Activating real stream: ${source.value}`);
-        }
-    }
-
-    activateMockStream(source) {
-        if (this.debugMode) {
-            this.log('DEBUG', `   * Activating mock stream: ${source.value}`);
-        }
-    }
-
     getLoadedLibraries() {
         return Array.from(this.loadedLibraries);
+    }
+
+    // ==================== GRACEFUL SHUTDOWN ====================
+
+    async shutdown() {
+        if (!this.quietMode) {
+            this.cleanOutput('Shutting down Fluxus Engine...');
+        }
+        
+        // Clear state
+        this.pools = {};
+        this.operators = { ...STANDARD_OPERATORS };
+        this.loadedLibraries.clear();
+        this.ast = null;
+        
+        if (!this.quietMode) {
+            this.cleanOutput('Fluxus Engine shutdown complete');
+        }
     }
 }
