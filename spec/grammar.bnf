@@ -1,0 +1,209 @@
+# FILENAME: spec/grammar.bnf
+# Fluxus Language Formal Grammar Specification v4.0 - ENTERPRISE GRADE
+
+# =============================================================================
+# FLUXUS LANGUAGE FORMAL GRAMMAR
+# BNF (Backus-Naur Form) Specification
+# =============================================================================
+
+# PROGRAM STRUCTURE
+<program>           ::= <imports>? <declarations> <pipelines>
+<imports>           ::= <import_stmt>+
+<import_stmt>       ::= "FLOW" <identifier> <newline>
+<declarations>      ::= <declaration>*
+<declaration>       ::= <pool_decl> | <function_decl>
+<pipelines>         ::= <pipeline>+
+
+# TIDAL POOL DECLARATIONS
+<pool_decl>         ::= "let" <identifier> "=" <pool_init> <newline>
+<pool_init>         ::= "<|>" <expression>
+
+# FUNCTION DECLARATIONS
+<function_decl>     ::= "FUNC" <identifier> <parameters> ":" <newline> <function_body>
+<parameters>        ::= "(" <param_list>? ")"
+<param_list>        ::= <param> ("," <param>)*
+<param>             ::= <identifier> ":" <type_annotation>
+<function_body>     ::= <indent> <pipeline> <dedent>
+
+# STREAM PIPELINES
+<pipeline>          ::= <stream_source> <pipeline_continuation>?
+<pipeline_continuation> ::= <pipe_operator> <pipeline_element> <pipeline_continuation>?
+<pipeline_element>  ::= <operator_call> | <lens_block> | <branching> | <terminal_sink>
+
+# STREAM SOURCES
+<stream_source>     ::= <finite_source> | <live_source>
+<finite_source>     ::= "~" <expression>
+<live_source>       ::= "~?" <expression>
+
+# OPERATORS AND TRANSFORMATIONS
+<operator_call>     ::= <operator_name> <argument_list>?
+<operator_name>     ::= <identifier> | <builtin_operator>
+<argument_list>     ::= "(" <expression_list>? ")"
+<expression_list>   ::= <expression> ("," <expression>)*
+
+# LENS BLOCKS (Functional Transformations)
+<lens_block>        ::= "{" <lens_expression> "}"
+<lens_expression>   ::= <lens_step> ("|" <lens_step>)*
+<lens_step>         ::= <property_access> | <operator_call> | <lens_condition>
+<property_access>   ::= "." <identifier>
+<lens_condition>    ::= <expression>
+
+# BRANCHING AND CONTROL FLOW
+<branching>         ::= <split_operator> <branch_flows>
+<split_operator>    ::= "split" <lens_block>
+<branch_flows>      ::= <true_flow> <false_flow>?
+<true_flow>         ::= "|" "TRUE_FLOW" <pipeline_continuation>
+<false_flow>        ::= "|" "FALSE_FLOW" <pipeline_continuation>
+
+# TERMINAL SINKS
+<terminal_sink>     ::= <sink_operator> <argument_list>?
+<sink_operator>     ::= "print" | "to_pool" | "ui_render" | "RESULT"
+
+# REACTIVE SUBSCRIPTIONS
+<subscription>      ::= <pool_reference> "->" <pipeline_continuation>
+<pool_reference>    ::= <identifier>
+
+# EXPRESSIONS AND LITERALS
+<expression>        ::= <logical_or_expression>
+<logical_or_expression> ::= <logical_and_expression> ("||" <logical_and_expression>)*
+<logical_and_expression> ::= <equality_expression> ("&&" <equality_expression>)*
+<equality_expression> ::= <comparison_expression> (("==" | "!=") <comparison_expression>)*
+<comparison_expression> ::= <additive_expression> ((">" | ">=" | "<" | "<=") <additive_expression>)*
+<additive_expression> ::= <multiplicative_expression> (("+" | "-") <multiplicative_expression>)*
+<multiplicative_expression> ::= <primary_expression> (("*" | "/" | "%") <primary_expression>)*
+<primary_expression> ::= <literal> | <identifier> | <pool_reference> | <function_call> | <array_literal> | <object_literal> | "(" <expression> ")"
+
+# LITERALS AND VALUES
+<literal>           ::= <number> | <string> | <boolean> | "null"
+<number>            ::= <integer> | <float>
+<integer>           ::= <digit>+
+<float>             ::= <digit>+ "." <digit>+
+<string>            ::= '"' <character>* '"' | "'" <character>* "'"
+<boolean>           ::= "true" | "false"
+
+# DATA STRUCTURES
+<array_literal>     ::= "[" <expression_list>? "]"
+<object_literal>    ::= "{" <property_list>? "}"
+<property_list>     ::= <property> ("," <property>)*
+<property>          ::= <identifier> ":" <expression>
+
+# FUNCTION CALLS
+<function_call>     ::= <identifier> <argument_list>
+
+# IDENTIFIERS AND TYPES
+<identifier>        ::= <letter> (<letter> | <digit> | "_")*
+<type_annotation>   ::= "String" | "Number" | "Boolean" | "Array" | "Object" | "Stream" | "Any"
+
+# BUILTIN OPERATORS
+<builtin_operator>  ::= "map" | "filter" | "reduce" | "combine_latest" | "debounce" | "throttle" | "split"
+
+# SYNTAX ELEMENTS
+<newline>           ::= "\n"
+<indent>            ::= # Increased indentation level
+<dedent>            ::= # Decreased indentation level
+<letter>            ::= [a-zA-Z]
+<digit>             ::= [0-9]
+<character>         ::= # Any Unicode character except quotes
+
+# =============================================================================
+# GRAMMAR RULES AND CONSTRAINTS
+# =============================================================================
+
+# STREAM SEMANTICS
+# 1. Finite streams (~) emit values and complete
+# 2. Live streams (~?) continue emitting until explicitly stopped
+# 3. Pipe operator (|) connects stream elements
+# 4. Lens blocks ({}) provide pure functional transformations
+
+# REACTIVE SEMANTICS
+# 1. Tidal Pools (<|>) are mutable state containers
+# 2. Pool subscriptions (->) create reactive dependencies
+# 3. Pool updates trigger re-execution of dependent pipelines
+
+# TYPE SYSTEM CONSTRAINTS
+# 1. All operators have defined input/output types
+# 2. Lens expressions must be pure functions
+# 3. Terminal sinks consume streams and produce side effects
+
+# OPERATOR PRECEDENCE (Highest to Lowest)
+# 1. Member access (.) , Function calls ()
+# 2. Unary operators
+# 3. Multiplicative (*, /, %)
+# 4. Additive (+, -)
+# 5. Relational (<, >, <=, >=)
+# 6. Equality (==, !=)
+# 7. Logical AND (&&)
+# 8. Logical OR (||)
+# 9. Pipe (|)
+# 10. Assignment (=)
+
+# =============================================================================
+# ENTERPRISE EXTENSIONS
+# =============================================================================
+
+# MODULE SYSTEM
+<module_import>     ::= "IMPORT" <module_path> ("as" <identifier>)?
+<module_path>       ::= <string> | <identifier> ("." <identifier>)*
+<module_export>     ::= "EXPORT" <identifier> ("as" <identifier>)?
+
+# ERROR HANDLING
+<error_handling>    ::= <try_block> <catch_block>?
+<try_block>         ::= "TRY" ":" <newline> <indent> <pipelines> <dedent>
+<catch_block>       ::= "CATCH" <identifier>? ":" <newline> <indent> <pipelines> <dedent>
+
+# ADVANCED STREAM OPERATIONS
+<window_operation>  ::= "window" "(" <expression> ")"
+<buffer_operation>  ::= "buffer" "(" <expression> ")"
+<merge_operation>   ::= "merge" "(" <stream_reference> ("," <stream_reference>)* ")"
+
+# METADATA AND ANNOTATIONS
+<annotation>        ::= "@" <identifier> ("(" <expression_list>? ")")?
+<annotated_element> ::= <annotation>* <pipeline> | <annotation>* <declaration>
+
+# PERFORMANCE HINTS
+<performance_hint>  ::= "#!" <hint_directive>
+<hint_directive>    ::= "optimize" | "cache" | "parallel" | "lazy"
+
+# =============================================================================
+# SYNTAX VALIDATION RULES
+# =============================================================================
+
+# VALIDATION RULE 1: Stream Consistency
+# Every pipeline must begin with a stream source and end with a terminal sink
+
+# VALIDATION RULE 2: Type Safety
+# Operator arguments must match expected types
+# Lens expressions must return boolean for filter operations
+
+# VALIDATION RULE 3: Reactive Integrity
+# Pool references must be declared before use
+# Subscriptions must reference existing pools
+
+# VALIDATION RULE 4: Function Purity
+# Functions must use RESULT sink to return values
+# Functions cannot have side effects outside their scope
+
+# VALIDATION RULE 5: Memory Management
+# Infinite streams must have bounded buffers
+# Large data structures should use streaming operations
+
+# =============================================================================
+# ENTERPRISE COMPLIANCE LEVELS
+# =============================================================================
+
+# LEVEL 1: BASIC SYNTAX
+# - Valid stream pipelines
+# - Proper operator usage
+# - Correct type annotations
+
+# LEVEL 2: PERFORMANCE OPTIMIZED
+# - Efficient lens expressions
+# - Appropriate stream fusion
+# - Memory-conscious operations
+
+# LEVEL 3: ENTERPRISE READY
+# - Comprehensive error handling
+# - Resource management
+# - Security considerations
+# - Monitoring and observability
+

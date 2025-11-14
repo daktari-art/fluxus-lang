@@ -1,0 +1,98 @@
+// FILENAME: src/stdlib/core/operators/StringOperators.js
+// String Manipulation Operators
+
+export class StringOperators {
+    static getOperators() {
+        return {
+            'capitalize': {
+                type: 'string',
+                implementation: (str) => str.charAt(0).toUpperCase() + str.slice(1),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Capitalize first letter'
+            },
+            'reverse': {
+                type: 'string',
+                implementation: (str) => str.split('').reverse().join(''),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Reverse string'
+            },
+            'replace': {
+                type: 'string',
+                implementation: (str, search, replacement) => str.replace(search, replacement),
+                signature: { input: 'String', output: 'String', args: 'String' },
+                description: 'Replace substring'
+            },
+            'substring': {
+                type: 'string',
+                implementation: (str, start, end) => str.substring(start, end),
+                signature: { input: 'String', output: 'String', args: 'Number' },
+                description: 'Extract substring'
+            },
+            'contains': {
+                type: 'string',
+                implementation: (str, search) => str.includes(search),
+                signature: { input: 'String', output: 'Boolean', args: 'String' },
+                description: 'Check if string contains substring'
+            },
+            'starts_with': {
+                type: 'string',
+                implementation: (str, prefix) => str.startsWith(prefix),
+                signature: { input: 'String', output: 'Boolean', args: 'String' },
+                description: 'Check if string starts with prefix'
+            },
+            'ends_with': {
+                type: 'string',
+                implementation: (str, suffix) => str.endsWith(suffix),
+                signature: { input: 'String', output: 'Boolean', args: 'String' },
+                description: 'Check if string ends with suffix'
+            },
+            'split_lines': {
+                type: 'string',
+                implementation: (str) => str.split('\n'),
+                signature: { input: 'String', output: 'Array', args: null },
+                description: 'Split string into lines'
+            },
+            'length': {
+                type: 'string',
+                implementation: (str) => str.length,
+                signature: { input: 'String', output: 'Number', args: null },
+                description: 'Get string length'
+            },
+            'repeat': {
+                type: 'string',
+                implementation: (str, count) => str.repeat(count),
+                signature: { input: 'String', output: 'String', args: 'Number' },
+                description: 'Repeat string'
+            },
+            'encode_base64': {
+                type: 'string',
+                implementation: (str) => Buffer.from(str).toString('base64'),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Base64 encode string'
+            },
+            'decode_base64': {
+                type: 'string',
+                implementation: (str) => Buffer.from(str, 'base64').toString(),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Base64 decode string'
+            }
+        };
+    }
+
+    static executeOperator(name, input, args = []) {
+        const operators = this.getOperators();
+        const operator = operators[name];
+        
+        if (!operator) {
+            throw new Error(`Unknown string operator: ${name}`);
+        }
+
+        if (typeof input !== 'string') {
+            throw new Error(`String operator ${name} requires string input`);
+        }
+
+        return operator.implementation(input, ...args);
+    }
+}
+
+export default StringOperators;

@@ -1,6 +1,6 @@
 {
   "name": "@fluxus-lang/core",
-  "version": "4.0.0",
+  "version": "4.3.0",
   "description": "Reactive Stream Programming Language - Where Time and Data are Unified in a non-blocking flow.",
   "main": "src/cli.js",
   "type": "module",
@@ -8,25 +8,22 @@
     "fluxus": "./bin/fluxus.js"
   },
   "scripts": {
-    "postinstall": "node install.js",
+    "postinstall": "echo 'FLUXUS INSTALLED'",
     "install:global": "node install.js --global",
     "start": "node src/cli.js",
     "test": "node test-run.js",
+    "test:unit": "node --test test/unit/",
+    "test:integration": "node --test test/integration/",
+    "test:all": "npm run test:unit && npm run test:integration",
     "dev": "node --watch src/cli.js run examples/counter.flux",
     "repl": "node src/cli.js repl",
-    "compile": "node src/cli.js compile examples/login.flux",
-    "parse": "node src/cli.js parse examples/arithmetic.flux",
-    "examples": "node src/cli.js run examples/hello.flux && node src/cli.js run examples/arithmetic.flux",
+    "compile": "node src/cli.js compile examples/arithmetic.flux",
+    "parse": "node src/cli.js parse examples/hello.flux",
+    "examples": "node test-run.js",
     "tutorial": "node src/cli.js tutorial",
     "dashboard": "node src/cli.js dashboard",
     "profile": "node src/cli.js profile examples/arithmetic.flux",
-    "install-pkg": "node src/cli.js install",
-    "uninstall-pkg": "node src/cli.js uninstall",
-    "list-pkgs": "node src/cli.js list",
-    "search-pkgs": "node src/cli.js search",
-    "exit-help": "node src/exit_helper.js",
-    "coverage": "node --test test-run.js",
-    "fix-global": "node fix-global-final.js"
+    "coverage": "c8 node --test test/unit/ test/integration/"
   },
   "keywords": [
     "reactive-programming",
@@ -51,11 +48,10 @@
     "src",
     "bin",
     "examples",
-    "cli.js",
-    "test-run.js",
-    "install.js",
+    "test",
     "*.md"
   ],
-  "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "c8": "^8.0.0"
+  }
 }

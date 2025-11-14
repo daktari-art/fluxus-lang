@@ -1,0 +1,165 @@
+// FILENAME: src/stdlib/core/operators/CoreOperators.js
+// Core Fluxus Operators - Production Grade
+
+export class CoreOperators {
+    static getOperators() {
+        return {
+            // Basic arithmetic
+            'add': {
+                type: 'arithmetic',
+                implementation: (input, args) => {
+                    const value = typeof input === 'number' ? input : parseFloat(input);
+                    const addValue = parseFloat(args[0]) || 0;
+                    return value + addValue;
+                },
+                signature: { input: 'Number', output: 'Number', args: 'Number' },
+                description: 'Add a number to input'
+            },
+            'subtract': {
+                type: 'arithmetic',
+                implementation: (input, args) => {
+                    const value = typeof input === 'number' ? input : parseFloat(input);
+                    const subValue = parseFloat(args[0]) || 0;
+                    return value - subValue;
+                },
+                signature: { input: 'Number', output: 'Number', args: 'Number' },
+                description: 'Subtract a number from input'
+            },
+            'multiply': {
+                type: 'arithmetic',
+                implementation: (input, args) => {
+                    const value = typeof input === 'number' ? input : parseFloat(input);
+                    const mulValue = parseFloat(args[0]) || 1;
+                    return value * mulValue;
+                },
+                signature: { input: 'Number', output: 'Number', args: 'Number' },
+                description: 'Multiply input by a number'
+            },
+            'divide': {
+                type: 'arithmetic',
+                implementation: (input, args) => {
+                    const value = typeof input === 'number' ? input : parseFloat(input);
+                    const divValue = parseFloat(args[0]) || 1;
+                    if (divValue === 0) throw new Error('Division by zero');
+                    return value / divValue;
+                },
+                signature: { input: 'Number', output: 'Number', args: 'Number' },
+                description: 'Divide input by a number'
+            },
+
+            // Collection operations
+            'map': {
+                type: 'collection',
+                implementation: (input, args, context) => {
+                    if (!Array.isArray(input)) {
+                        throw new Error('Map operator requires array input');
+                    }
+                    const transformFn = this.parseLensFunction(args[0], context);
+                    return input.map(transformFn);
+                },
+                signature: { input: 'Array', output: 'Array', args: 'Function' },
+                description: 'Transform each element in array'
+            },
+            'reduce': {
+                type: 'collection',
+                implementation: (input, args, context) => {
+                    if (!Array.isArray(input)) {
+                        throw new Error('Reduce operator requires array input');
+                    }
+                    const reducerFn = this.parseLensFunction(args[0], context);
+                    const initialValue = args.length > 1 ? parseFloat(args[1]) : 0;
+                    return input.reduce(reducerFn, initialValue);
+                },
+                signature: { input: 'Array', output: 'Any', args: 'Function' },
+                description: 'Reduce array to single value'
+            },
+            'filter': {
+                type: 'collection',
+                implementation: (input, args, context) => {
+                    if (!Array.isArray(input)) {
+                        throw new Error('Filter operator requires array input');
+                    }
+                    const predicateFn = this.parseLensFunction(args[0], context);
+                    return input.filter(predicateFn);
+                },
+                signature: { input: 'Array', output: 'Array', args: 'Function' },
+                description: 'Filter array elements'
+            },
+
+            // String operations
+            'to_upper': {
+                type: 'string',
+                implementation: (input) => String(input).toUpperCase(),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Convert string to uppercase'
+            },
+            'to_lower': {
+                type: 'string',
+                implementation: (input) => String(input).toLowerCase(),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Convert string to lowercase'
+            },
+            'trim': {
+                type: 'string',
+                implementation: (input) => String(input).trim(),
+                signature: { input: 'String', output: 'String', args: null },
+                description: 'Trim whitespace from string'
+            },
+
+            // Stream operations
+            'print': {
+                type: 'sink',
+                implementation: (input) => {
+                    console.log('📤', input);
+                    return input; // Pass through for chaining
+                },
+                signature: { input: 'Any', output: 'Any', args: null },
+                description: 'Print value to console'
+            },
+            'to_pool': {
+                type: 'sink',
+                implementation: (input, args, context) => {
+                    const poolName = args[0];
+                    if (!poolName) throw new Error('Pool name required for to_pool');
+                    
+                    if (context.engine && context.engine.pools) {
+                        context.engine.pools[poolName] = {
+                            value: input,
+                            _updates: (context.engine.pools[poolName]?._updates || 0) + 1
+                        };
+                    }
+                    return input;
+                },
+                signature: { input: 'Any', output: 'Any', args: 'String' },
+                description: 'Store value in tidal pool'
+            }
+        };
+    }
+
+    static parseLensFunction(lensCode, context) {
+        // Simple lens function parser for {.value | operator} patterns
+        if (lensCode.includes('.value')) {
+            return (item) => {
+                // For now, handle simple .value access
+                // In full implementation, this would parse the lens pipeline
+                return item && typeof item === 'object' ? item.value : item;
+            };
+        }
+        
+        // Default identity function
+        return (x) => x;
+    }
+
+    static executeOperator(name, input, args = [], context = {}) {
+        const operators = this.getOperators();
+        const operator = operators[name];
+
+        if (!operator) {
+            throw new Error(`Unknown core operator: ${name}`);
+        }
+
+        return operator.implementation(input, args, context);
+    }
+}
+
+export default CoreOperators;

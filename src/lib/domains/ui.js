@@ -1,478 +1,722 @@
 // FILENAME: src/lib/domains/ui.js
-// Fluxus User Interface and DOM Operations
-
-/**
- * UI and DOM operators for building reactive user interfaces
- * Provides stream-based DOM manipulation and event handling
- */
+// Fluxus UI Domain Library - Production Grade
 
 export const UI_OPERATORS = {
-    /**
-     * Render data to DOM element
-     * @param {any} input - Data to render
-     * @param {Array} args - [selector, template] Target element and template
-     * @param {Object} context - Execution context
-     * @returns {any} Original input
-     */
-    'ui_render': (input, args, context) => {
-        const selector = args[0];
-        const template = args[1] || '{{value}}';
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_RENDER] ${selector}: ${JSON.stringify(input)}`);
-            return input;
-        }
-        
-        try {
-            const element = document.querySelector(selector);
-            if (!element) {
-                console.warn(`⚠️ UI element not found: ${selector}`);
-                return input;
-            }
-            
-            // Simple template rendering
-            let content = template;
-            if (typeof input === 'object' && input !== null) {
-                Object.entries(input).forEach(([key, value]) => {
-                    content = content.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
-                });
-            } else {
-                content = content.replace(/{{value}}/g, String(input));
-            }
-            
-            element.innerHTML = content;
-            
-            if (context.engine.debugMode) {
-                console.log(`🎨 Rendered to ${selector}:`, input);
-            }
-            
-        } catch (error) {
-            console.error(`❌ UI render failed for ${selector}:`, error.message);
-        }
-        
-        return input;
-    },
-    
-    /**
-     * Create DOM event stream
-     * @param {any} input - Stream input (ignored for source)
-     * @param {Array} args - [selector, eventType] DOM element and event type
-     * @param {Object} context - Execution context
-     * @returns {Object} Event data
-     */
-    'ui_events': (input, args, context) => {
-        const selector = args[0];
-        const eventType = args[1] || 'click';
-        
-        if (typeof document === 'undefined') {
-            // Mock implementation for Node.js
-            const mockEvent = {
-                type: eventType,
-                target: selector,
-                timestamp: Date.now(),
-                mock: true,
-                data: 'mock_event_data'
-            };
-            
-            // Simulate occasional events
-            if (Math.random() < 0.3) {
-                return mockEvent;
-            }
-            
-            return undefined;
-        }
-        
-        // Browser implementation
-        if (!context.engine._uiEventListeners) {
-            context.engine._uiEventListeners = new Map();
-        }
-        
-        const eventKey = `${selector}_${eventType}`;
-        
-        // Return a special object indicating this is an event source
-        return {
-            _fluxusEventSource: true,
-            selector: selector,
-            eventType: eventType,
-            key: eventKey,
-            description: `DOM events from ${selector} (${eventType})`
-        };
-    },
-    
-    /**
-     * Set CSS styles on DOM element
-     * @param {any} input - Style data or element reference
-     * @param {Array} args - [selector, styles] Target element and styles
-     * @param {Object} context - Execution context
-     * @returns {any} Original input
-     */
-    'ui_style': (input, args, context) => {
-        const selector = args[0];
-        const styles = args[1];
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_STYLE] ${selector}: ${styles}`);
-            return input;
-        }
-        
-        try {
-            const element = document.querySelector(selector);
-            if (!element) {
-                console.warn(`⚠️ UI element not found: ${selector}`);
-                return input;
-            }
-            
-            // Parse styles if provided as string
-            let styleObj = {};
-            if (typeof styles === 'string') {
-                try {
-                    styleObj = JSON.parse(styles.replace(/(\w+):/g, '"$1":'));
-                } catch {
-                    // Fallback: assume it's already an object from input
-                    styleObj = typeof input === 'object' ? input : {};
-                }
-            } else if (typeof input === 'object') {
-                styleObj = input;
-            }
-            
-            // Apply styles
-            Object.assign(element.style, styleObj);
-            
-            if (context.engine.debugMode) {
-                console.log(`🎨 Styled ${selector}:`, styleObj);
-            }
-            
-        } catch (error) {
-            console.error(`❌ UI style failed for ${selector}:`, error.message);
-        }
-        
-        return input;
-    },
-    
-    /**
-     * Toggle CSS class on DOM element
-     * @param {any} input - Toggle state or condition
-     * @param {Array} args - [selector, className, condition] Target and class
-     * @param {Object} context - Execution context
-     * @returns {any} Original input
-     */
-    'ui_toggle_class': (input, args, context) => {
-        const selector = args[0];
-        const className = args[1];
-        const condition = args[2];
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_TOGGLE] ${selector} .${className}: ${condition || input}`);
-            return input;
-        }
-        
-        try {
-            const element = document.querySelector(selector);
-            if (!element) {
-                console.warn(`⚠️ UI element not found: ${selector}`);
-                return input;
-            }
-            
-            // Determine if class should be added
-            let shouldAdd = false;
-            if (condition !== undefined) {
-                shouldAdd = Boolean(condition);
-            } else {
-                shouldAdd = Boolean(input);
-            }
-            
-            if (shouldAdd) {
-                element.classList.add(className);
-            } else {
-                element.classList.remove(className);
-            }
-            
-            if (context.engine.debugMode) {
-                console.log(`🎨 Toggled ${selector} .${className}: ${shouldAdd}`);
-            }
-            
-        } catch (error) {
-            console.error(`❌ UI toggle class failed for ${selector}:`, error.message);
-        }
-        
-        return input;
-    },
-    
-    /**
-     * Update element attributes
-     * @param {any} input - Attribute data
-     * @param {Array} args - [selector, attributes] Target and attributes
-     * @param {Object} context - Execution context
-     * @returns {any} Original input
-     */
-    'ui_attributes': (input, args, context) => {
-        const selector = args[0];
-        const attributes = args[1];
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_ATTRS] ${selector}: ${attributes}`);
-            return input;
-        }
-        
-        try {
-            const element = document.querySelector(selector);
-            if (!element) {
-                console.warn(`⚠️ UI element not found: ${selector}`);
-                return input;
-            }
-            
-            // Parse attributes
-            let attrObj = {};
-            if (typeof attributes === 'string') {
-                try {
-                    attrObj = JSON.parse(attributes.replace(/(\w+):/g, '"$1":'));
-                } catch {
-                    attrObj = typeof input === 'object' ? input : {};
-                }
-            } else if (typeof input === 'object') {
-                attrObj = input;
-            }
-            
-            // Apply attributes
-            Object.entries(attrObj).forEach(([key, value]) => {
-                element.setAttribute(key, String(value));
-            });
-            
-            if (context.engine.debugMode) {
-                console.log(`🎨 Attributes set on ${selector}:`, attrObj);
-            }
-            
-        } catch (error) {
-            console.error(`❌ UI attributes failed for ${selector}:`, error.message);
-        }
-        
-        return input;
-    },
-    
-    /**
-     * Create reactive form binding
-     * @param {any} input - Form data
-     * @param {Array} args - [formSelector, fieldMapping] Form and field mapping
-     * @param {Object} context - Execution context
-     * @returns {Object} Form data
-     */
-    'ui_form_binding': (input, args, context) => {
-        const formSelector = args[0];
-        const fieldMapping = args[1];
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_FORM] ${formSelector}:`, input);
-            return input;
-        }
-        
-        try {
-            const form = document.querySelector(formSelector);
-            if (!form) {
-                console.warn(`⚠️ Form not found: ${formSelector}`);
-                return input;
-            }
-            
-            let formData = {};
-            
-            if (typeof input === 'object' && input !== null) {
-                // Update form from data
-                Object.entries(input).forEach(([field, value]) => {
-                    const element = form.querySelector(`[name="${field}"]`);
-                    if (element) {
-                        if (element.type === 'checkbox') {
-                            element.checked = Boolean(value);
-                        } else {
-                            element.value = String(value);
-                        }
-                    }
-                });
-                formData = { ...input };
-            } else {
-                // Extract data from form
-                const formElements = form.elements;
-                for (let element of formElements) {
-                    if (element.name) {
-                        if (element.type === 'checkbox') {
-                            formData[element.name] = element.checked;
-                        } else {
-                            formData[element.name] = element.value;
-                        }
-                    }
-                }
-            }
-            
-            if (context.engine.debugMode) {
-                console.log(`📝 Form data for ${formSelector}:`, formData);
-            }
-            
-            return formData;
-            
-        } catch (error) {
-            console.error(`❌ UI form binding failed for ${formSelector}:`, error.message);
-            return input;
+    // Component rendering
+    'render_component': {
+        type: 'ui_rendering',
+        implementation: (input, args, context) => {
+            const [componentType, props] = args;
+            return this.renderComponent(componentType, props, input, context);
+        },
+        metadata: {
+            category: 'rendering',
+            complexity: 'O(1)',
+            visual: true,
+            reactive: true
         }
     },
-    
-    /**
-     * Show/hide DOM elements
-     * @param {any} input - Visibility state
-     * @param {Array} args - [selector, condition] Target and visibility condition
-     * @param {Object} context - Execution context
-     * @returns {any} Original input
-     */
-    'ui_visibility': (input, args, context) => {
-        const selector = args[0];
-        const condition = args[1];
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_VISIBILITY] ${selector}: ${condition || input}`);
-            return input;
-        }
-        
-        try {
-            const element = document.querySelector(selector);
-            if (!element) {
-                console.warn(`⚠️ UI element not found: ${selector}`);
-                return input;
-            }
-            
-            // Determine visibility
-            let isVisible = false;
-            if (condition !== undefined) {
-                isVisible = Boolean(condition);
-            } else {
-                isVisible = Boolean(input);
-            }
-            
-            element.style.display = isVisible ? '' : 'none';
-            
-            if (context.engine.debugMode) {
-                console.log(`👁️ Visibility ${selector}: ${isVisible ? 'visible' : 'hidden'}`);
-            }
-            
-        } catch (error) {
-            console.error(`❌ UI visibility failed for ${selector}:`, error.message);
-        }
-        
-        return input;
-    },
-    
-    /**
-     * Create animation stream
-     * @param {any} input - Animation data
-     * @param {Array} args - [selector, animation] Target and animation properties
-     * @param {Object} context - Execution context
-     * @returns {any} Animation result
-     */
-    'ui_animate': (input, args, context) => {
-        const selector = args[0];
-        const animation = args[1];
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_ANIMATE] ${selector}: ${animation}`);
-            return input;
-        }
-        
-        try {
-            const element = document.querySelector(selector);
-            if (!element) {
-                console.warn(`⚠️ UI element not found: ${selector}`);
-                return input;
-            }
-            
-            // Parse animation properties
-            let animProps = {};
-            if (typeof animation === 'string') {
-                try {
-                    animProps = JSON.parse(animation);
-                } catch {
-                    animProps = typeof input === 'object' ? input : {};
-                }
-            } else if (typeof input === 'object') {
-                animProps = input;
-            }
-            
-            // Apply animation using CSS transitions
-            const duration = animProps.duration || '0.3s';
-            const timing = animProps.timing || 'ease';
-            
-            element.style.transition = `all ${duration} ${timing}`;
-            
-            // Apply target styles
-            if (animProps.styles) {
-                Object.assign(element.style, animProps.styles);
-            }
-            
-            if (context.engine.debugMode) {
-                console.log(`🎬 Animated ${selector}:`, animProps);
-            }
-            
-            return {
-                animated: true,
-                selector: selector,
-                duration: duration,
-                timing: timing,
-                input: input
-            };
-            
-        } catch (error) {
-            console.error(`❌ UI animation failed for ${selector}:`, error.message);
-            return input;
+
+    'update_props': {
+        type: 'ui_rendering',
+        implementation: (input, args, context) => {
+            const [componentId, newProps] = args;
+            return this.updateComponentProps(componentId, newProps, context);
+        },
+        metadata: {
+            category: 'rendering',
+            complexity: 'O(1)',
+            visual: true,
+            reactive: true
         }
     },
-    
-    /**
-     * Create virtual list for large datasets
-     * @param {Array} input - Data array
-     * @param {Array} args - [containerSelector, itemRenderer] Container and renderer
-     * @param {Object} context - Execution context
-     * @returns {Array} Original data
-     */
-    'ui_virtual_list': (input, args, context) => {
-        const containerSelector = args[0];
-        const itemRenderer = args[1] || '{{value}}';
-        
-        if (!Array.isArray(input)) {
-            return input;
+
+    // Event handling
+    'handle_event': {
+        type: 'ui_events',
+        implementation: (input, args, context) => {
+            const [eventType, handler, options] = args;
+            return this.setupEventHandler(eventType, handler, options, context);
+        },
+        metadata: {
+            category: 'events',
+            complexity: 'O(1)',
+            interactive: true,
+            eventDriven: true
         }
-        
-        if (typeof document === 'undefined') {
-            console.log(`[UI_VIRTUAL_LIST] ${containerSelector}: ${input.length} items`);
-            return input;
+    },
+
+    'bind_data': {
+        type: 'ui_data',
+        implementation: (input, args, context) => {
+            const [componentId, dataSource] = args;
+            return this.bindDataToComponent(componentId, dataSource, context);
+        },
+        metadata: {
+            category: 'data_binding',
+            complexity: 'O(1)',
+            reactive: true,
+            dataDriven: true
         }
-        
-        try {
-            const container = document.querySelector(containerSelector);
-            if (!container) {
-                console.warn(`⚠️ Container not found: ${containerSelector}`);
-                return input;
-            }
-            
-            // Simple implementation - in real app, this would use virtualization
-            const visibleItems = input.slice(0, 50); // Show first 50 items
-            
-            const itemsHTML = visibleItems.map((item, index) => {
-                let content = itemRenderer;
-                if (typeof item === 'object' && item !== null) {
-                    Object.entries(item).forEach(([key, value]) => {
-                        content = content.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
-                    });
-                } else {
-                    content = content.replace(/{{value}}/g, String(item));
-                }
-                return `<div class="virtual-item" data-index="${index}">${content}</div>`;
-            }).join('');
-            
-            container.innerHTML = itemsHTML;
-            
-            if (context.engine.debugMode) {
-                console.log(`📜 Virtual list ${containerSelector}: ${visibleItems.length}/${input.length} items`);
-            }
-            
-        } catch (error) {
-            console.error(`❌ UI virtual list failed for ${containerSelector}:`, error.message);
+    },
+
+    // Layout and styling
+    'apply_style': {
+        type: 'ui_styling',
+        implementation: (input, args, context) => {
+            const [componentId, styleRules] = args;
+            return this.applyStyleRules(componentId, styleRules, context);
+        },
+        metadata: {
+            category: 'styling',
+            complexity: 'O(1)',
+            visual: true,
+            css: true
         }
-        
-        return input;
+    },
+
+    'create_layout': {
+        type: 'ui_layout',
+        implementation: (input, args, context) => {
+            const [layoutType, children] = args;
+            return this.createLayout(layoutType, children, context);
+        },
+        metadata: {
+            category: 'layout',
+            complexity: 'O(n)',
+            visual: true,
+            responsive: true
+        }
+    },
+
+    // Animation
+    'animate': {
+        type: 'ui_animation',
+        implementation: (input, args, context) => {
+            const [componentId, animation, duration] = args;
+            return this.animateComponent(componentId, animation, duration, context);
+        },
+        metadata: {
+            category: 'animation',
+            complexity: 'O(1)',
+            visual: true,
+            timing: true
+        }
+    },
+
+    // State management
+    'manage_state': {
+        type: 'ui_state',
+        implementation: (input, args, context) => {
+            const [stateKey, initialValue] = args;
+            return this.createState(stateKey, initialValue, context);
+        },
+        metadata: {
+            category: 'state_management',
+            complexity: 'O(1)',
+            reactive: true,
+            stateful: true
+        }
+    },
+
+    // Form handling
+    'create_form': {
+        type: 'ui_forms',
+        implementation: (input, args, context) => {
+            const [formSchema, onSubmit] = args;
+            return this.createForm(formSchema, onSubmit, context);
+        },
+        metadata: {
+            category: 'forms',
+            complexity: 'O(n)',
+            interactive: true,
+            validation: true
+        }
+    },
+
+    // Responsive design
+    'responsive_breakpoint': {
+        type: 'ui_responsive',
+        implementation: (input, args, context) => {
+            const breakpoints = args[0] || { sm: 640, md: 768, lg: 1024, xl: 1280 };
+            return this.setupResponsiveBreakpoints(breakpoints, context);
+        },
+        metadata: {
+            category: 'responsive',
+            complexity: 'O(1)',
+            adaptive: true,
+            mobile: true
+        }
     }
 };
+
+export class UIOperators {
+    constructor() {
+        this.components = new Map();
+        this.eventHandlers = new Map();
+        this.state = new Map();
+        this.animations = new Map();
+        this.styles = new Map();
+        
+        this.componentRegistry = this.initializeComponentRegistry();
+        this.layoutEngine = new LayoutEngine();
+        this.styleEngine = new StyleEngine();
+    }
+
+    initializeComponentRegistry() {
+        return {
+            button: this.renderButton.bind(this),
+            input: this.renderInput.bind(this),
+            text: this.renderText.bind(this),
+            container: this.renderContainer.bind(this),
+            list: this.renderList.bind(this),
+            card: this.renderCard.bind(this),
+            form: this.renderForm.bind(this)
+        };
+    }
+
+    // Component rendering
+    renderComponent(componentType, props, data, context) {
+        const renderer = this.componentRegistry[componentType];
+        if (!renderer) {
+            throw new Error(`Unknown component type: ${componentType}`);
+        }
+
+        const componentId = this.generateComponentId();
+        const component = {
+            id: componentId,
+            type: componentType,
+            props: { ...props, data },
+            children: [],
+            state: {},
+            events: new Map(),
+            renderedAt: Date.now()
+        };
+
+        // Render the component
+        const rendered = renderer(component, context);
+        component.rendered = rendered;
+
+        this.components.set(componentId, component);
+
+        return {
+            componentId,
+            type: componentType,
+            rendered,
+            metadata: {
+                renderTime: Date.now() - component.renderedAt,
+                propsCount: Object.keys(props).length
+            }
+        };
+    }
+
+    updateComponentProps(componentId, newProps, context) {
+        const component = this.components.get(componentId);
+        if (!component) {
+            throw new Error(`Component not found: ${componentId}`);
+        }
+
+        // Update props
+        component.props = { ...component.props, ...newProps };
+        component.updatedAt = Date.now();
+
+        // Re-render component
+        const renderer = this.componentRegistry[component.type];
+        const rendered = renderer(component, context);
+        component.rendered = rendered;
+
+        // Notify about prop change
+        this.notifyPropChange(componentId, newProps, context);
+
+        return {
+            componentId,
+            updated: true,
+            renderTime: Date.now() - component.updatedAt,
+            changedProps: Object.keys(newProps)
+        };
+    }
+
+    // Event handling
+    setupEventHandler(eventType, handler, options, context) {
+        const handlerId = this.generateHandlerId();
+        
+        const eventHandler = {
+            id: handlerId,
+            type: eventType,
+            handler,
+            options: options || {},
+            registeredAt: Date.now()
+        };
+
+        this.eventHandlers.set(handlerId, eventHandler);
+
+        // Bind to relevant components if specified
+        if (options?.componentId) {
+            this.bindHandlerToComponent(options.componentId, handlerId, eventType, context);
+        }
+
+        return {
+            handlerId,
+            eventType,
+            bound: !!options?.componentId
+        };
+    }
+
+    bindHandlerToComponent(componentId, handlerId, eventType, context) {
+        const component = this.components.get(componentId);
+        if (!component) {
+            throw new Error(`Component not found: ${componentId}`);
+        }
+
+        if (!component.events.has(eventType)) {
+            component.events.set(eventType, new Set());
+        }
+
+        component.events.get(eventType).add(handlerId);
+    }
+
+    // Data binding
+    bindDataToComponent(componentId, dataSource, context) {
+        const component = this.components.get(componentId);
+        if (!component) {
+            throw new Error(`Component not found: ${componentId}`);
+        }
+
+        // Set up reactive data binding
+        const bindingId = this.generateBindingId();
+        
+        const binding = {
+            id: bindingId,
+            componentId,
+            dataSource,
+            establishedAt: Date.now(),
+            lastUpdate: Date.now()
+        };
+
+        // In a real implementation, this would set up observables
+        component.dataBinding = binding;
+
+        return {
+            bindingId,
+            componentId,
+            dataSource,
+            active: true
+        };
+    }
+
+    // Styling
+    applyStyleRules(componentId, styleRules, context) {
+        const component = this.components.get(componentId);
+        if (!component) {
+            throw new Error(`Component not found: ${componentId}`);
+        }
+
+        // Parse and apply style rules
+        const compiledStyles = this.styleEngine.compile(styleRules);
+        component.styles = { ...component.styles, ...compiledStyles };
+
+        // Update rendering with new styles
+        this.updateComponentStyles(componentId, compiledStyles, context);
+
+        return {
+            componentId,
+            stylesApplied: Object.keys(styleRules),
+            compiled: compiledStyles
+        };
+    }
+
+    // Layout
+    createLayout(layoutType, children, context) {
+        const layoutId = this.generateLayoutId();
+        
+        const layout = {
+            id: layoutId,
+            type: layoutType,
+            children: children || [],
+            constraints: this.getLayoutConstraints(layoutType),
+            computed: null
+        };
+
+        // Compute layout
+        layout.computed = this.layoutEngine.computeLayout(layout);
+
+        return {
+            layoutId,
+            type: layoutType,
+            childrenCount: children.length,
+            computed: layout.computed
+        };
+    }
+
+    // Animation
+    animateComponent(componentId, animation, duration, context) {
+        const component = this.components.get(componentId);
+        if (!component) {
+            throw new Error(`Component not found: ${componentId}`);
+        }
+
+        const animationId = this.generateAnimationId();
+        
+        const anim = {
+            id: animationId,
+            componentId,
+            animation,
+            duration: duration || 300,
+            startTime: Date.now(),
+            state: 'running'
+        };
+
+        this.animations.set(animationId, anim);
+
+        // Start animation
+        this.startAnimation(anim, context);
+
+        return {
+            animationId,
+            componentId,
+            duration: anim.duration,
+            state: anim.state
+        };
+    }
+
+    // State management
+    createState(stateKey, initialValue, context) {
+        if (this.state.has(stateKey)) {
+            throw new Error(`State already exists: ${stateKey}`);
+        }
+
+        const state = {
+            key: stateKey,
+            value: initialValue,
+            subscribers: new Set(),
+            createdAt: Date.now(),
+            updates: 0
+        };
+
+        this.state.set(stateKey, state);
+
+        return {
+            stateKey,
+            initialValue,
+            created: true
+        };
+    }
+
+    updateState(stateKey, newValue, context) {
+        const state = this.state.get(stateKey);
+        if (!state) {
+            throw new Error(`State not found: ${stateKey}`);
+        }
+
+        const oldValue = state.value;
+        state.value = newValue;
+        state.updates++;
+        state.updatedAt = Date.now();
+
+        // Notify subscribers
+        this.notifyStateSubscribers(stateKey, newValue, oldValue, context);
+
+        return {
+            stateKey,
+            newValue,
+            oldValue,
+            updateCount: state.updates
+        };
+    }
+
+    // Form handling
+    createForm(formSchema, onSubmit, context) {
+        const formId = this.generateFormId();
+        
+        const form = {
+            id: formId,
+            schema: formSchema,
+            fields: this.parseFormSchema(formSchema),
+            values: {},
+            validation: {},
+            onSubmit,
+            state: 'idle'
+        };
+
+        // Render form components
+        const renderedForm = this.renderFormComponents(form, context);
+
+        return {
+            formId,
+            fields: form.fields,
+            rendered: renderedForm,
+            state: form.state
+        };
+    }
+
+    // Responsive design
+    setupResponsiveBreakpoints(breakpoints, context) {
+        const responsiveConfig = {
+            breakpoints,
+            currentBreakpoint: this.detectCurrentBreakpoint(breakpoints),
+            listeners: new Set()
+        };
+
+        // Set up resize listener
+        this.setupResizeListener(responsiveConfig, context);
+
+        return {
+            breakpoints,
+            current: responsiveConfig.currentBreakpoint,
+            active: true
+        };
+    }
+
+    // Utility methods
+    renderButton(component, context) {
+        const { props } = component;
+        return {
+            type: 'button',
+            text: props.text || 'Button',
+            onClick: props.onClick ? this.createEventProxy(component.id, 'click', props.onClick) : null,
+            style: props.style || {},
+            disabled: props.disabled || false
+        };
+    }
+
+    renderInput(component, context) {
+        const { props } = component;
+        return {
+            type: 'input',
+            value: props.value || '',
+            placeholder: props.placeholder || '',
+            onChange: props.onChange ? this.createEventProxy(component.id, 'change', props.onChange) : null,
+            style: props.style || {}
+        };
+    }
+
+    renderText(component, context) {
+        const { props } = component;
+        return {
+            type: 'text',
+            content: props.content || '',
+            style: props.style || {}
+        };
+    }
+
+    renderContainer(component, context) {
+        const { props, children } = component;
+        return {
+            type: 'container',
+            children: children.map(child => this.components.get(child)?.rendered),
+            layout: props.layout || 'column',
+            style: props.style || {}
+        };
+    }
+
+    createEventProxy(componentId, eventType, handler) {
+        return (event) => {
+            // Find and execute relevant event handlers
+            const component = this.components.get(componentId);
+            if (component && component.events.has(eventType)) {
+                const handlers = component.events.get(eventType);
+                handlers.forEach(handlerId => {
+                    const handler = this.eventHandlers.get(handlerId);
+                    if (handler) {
+                        handler.handler(event);
+                    }
+                });
+            }
+        };
+    }
+
+    notifyPropChange(componentId, changedProps, context) {
+        // Notify about prop changes for reactive updates
+        console.log(`Component ${componentId} props updated:`, Object.keys(changedProps));
+    }
+
+    notifyStateSubscribers(stateKey, newValue, oldValue, context) {
+        const state = this.state.get(stateKey);
+        state.subscribers.forEach(subscriberId => {
+            // Notify subscriber about state change
+            const component = this.components.get(subscriberId);
+            if (component) {
+                this.updateComponentProps(subscriberId, { [stateKey]: newValue }, context);
+            }
+        });
+    }
+
+    startAnimation(animation, context) {
+        // Start CSS or JavaScript animation
+        setTimeout(() => {
+            animation.state = 'completed';
+            console.log(`Animation ${animation.id} completed`);
+        }, animation.duration);
+    }
+
+    detectCurrentBreakpoint(breakpoints) {
+        // Simulate current screen width
+        const screenWidth = 1024; // This would be dynamic in real implementation
+        
+        if (screenWidth >= breakpoints.xl) return 'xl';
+        if (screenWidth >= breakpoints.lg) return 'lg';
+        if (screenWidth >= breakpoints.md) return 'md';
+        return 'sm';
+    }
+
+    setupResizeListener(config, context) {
+        // Set up window resize listener for responsive updates
+        // In real implementation, this would use window.addEventListener
+        console.log('Responsive breakpoints configured:', config.breakpoints);
+    }
+
+    parseFormSchema(schema) {
+        return Object.entries(schema).map(([name, field]) => ({
+            name,
+            type: field.type || 'text',
+            label: field.label || name,
+            required: field.required || false,
+            validation: field.validation || {}
+        }));
+    }
+
+    renderFormComponents(form, context) {
+        return form.fields.map(field => 
+            this.renderComponent('input', {
+                ...field,
+                key: field.name
+            }, null, context)
+        );
+    }
+
+    generateComponentId() { return `comp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
+    generateHandlerId() { return `handler_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
+    generateBindingId() { return `binding_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
+    generateLayoutId() { return `layout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
+    generateAnimationId() { return `anim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
+    generateFormId() { return `form_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
+
+    getLayoutConstraints(layoutType) {
+        const constraints = {
+            flex: { direction: 'row', wrap: 'nowrap' },
+            grid: { columns: 12, gap: '10px' },
+            absolute: { positioning: 'absolute' },
+            relative: { positioning: 'relative' }
+        };
+        return constraints[layoutType] || constraints.flex;
+    }
+
+    updateComponentStyles(componentId, styles, context) {
+        // Update component with new styles
+        const component = this.components.get(componentId);
+        if (component) {
+            component.rendered.style = { ...component.rendered.style, ...styles };
+        }
+    }
+}
+
+// Supporting engines
+class LayoutEngine {
+    computeLayout(layout) {
+        const { type, children, constraints } = layout;
+        
+        switch (type) {
+            case 'flex':
+                return this.computeFlexLayout(children, constraints);
+            case 'grid':
+                return this.computeGridLayout(children, constraints);
+            case 'absolute':
+                return this.computeAbsoluteLayout(children, constraints);
+            default:
+                return this.computeFlexLayout(children, constraints);
+        }
+    }
+
+    computeFlexLayout(children, constraints) {
+        return {
+            type: 'flex',
+            direction: constraints.direction,
+            mainAxis: this.computeMainAxis(children),
+            crossAxis: this.computeCrossAxis(children),
+            children: children.map((child, index) => ({
+                index,
+                size: this.computeChildSize(child),
+                position: this.computeFlexPosition(index, constraints.direction)
+            }))
+        };
+    }
+
+    computeGridLayout(children, constraints) {
+        return {
+            type: 'grid',
+            columns: constraints.columns,
+            rows: Math.ceil(children.length / constraints.columns),
+            children: children.map((child, index) => ({
+                index,
+                row: Math.floor(index / constraints.columns),
+                column: index % constraints.columns,
+                size: this.computeChildSize(child)
+            }))
+        };
+    }
+
+    computeChildSize(child) {
+        // Simplified size computation
+        return { width: 100, height: 50 };
+    }
+
+    computeMainAxis(children) { return children.length * 100; }
+    computeCrossAxis(children) { return 50; }
+    computeFlexPosition(index, direction) { 
+        return direction === 'row' ? { x: index * 100, y: 0 } : { x: 0, y: index * 50 };
+    }
+}
+
+class StyleEngine {
+    compile(styleRules) {
+        const compiled = {};
+        
+        for (const [property, value] of Object.entries(styleRules)) {
+            compiled[property] = this.normalizeValue(property, value);
+        }
+        
+        return compiled;
+    }
+
+    normalizeValue(property, value) {
+        // Normalize CSS values
+        const normalizers = {
+            color: (v) => this.normalizeColor(v),
+            size: (v) => this.normalizeSize(v),
+            spacing: (v) => this.normalizeSpacing(v)
+        };
+
+        const normalizer = normalizers[this.getPropertyType(property)];
+        return normalizer ? normalizer(value) : value;
+    }
+
+    normalizeColor(value) {
+        if (value.startsWith('#')) return value;
+        if (value.startsWith('rgb')) return value;
+        return `#${value}`; // Assume hex without #
+    }
+
+    normalizeSize(value) {
+        if (typeof value === 'number') return `${value}px`;
+        return value;
+    }
+
+    normalizeSpacing(value) {
+        return this.normalizeSize(value);
+    }
+
+    getPropertyType(property) {
+        const types = {
+            color: ['color', 'background', 'borderColor'],
+            size: ['width', 'height', 'fontSize'],
+            spacing: ['margin', 'padding', 'gap']
+        };
+
+        for (const [type, properties] of Object.entries(types)) {
+            if (properties.some(p => property.includes(p))) return type;
+        }
+        return 'generic';
+    }
+}
+
+export default UI_OPERATORS;

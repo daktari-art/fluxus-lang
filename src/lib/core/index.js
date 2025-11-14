@@ -1,14 +1,10 @@
-// FILENAME: src/lib/core/index.js
-// Core library exports
+// Core Library Index - Exports all core operators
+import { CoreOperators } from './core.js';
+import { TypeOperators } from './types.js';
+import { CollectionOperators } from './collections.js';
 
-import { CORE_OPERATORS } from './core.js';
-import { TYPE_OPERATORS } from './types.js';
-import { COLLECTION_OPERATORS } from './collections.js';
-
-export const CORE_LIBRARY = {
-    ...CORE_OPERATORS,
-    ...TYPE_OPERATORS, 
-    ...COLLECTION_OPERATORS
+export default {
+    ...CoreOperators,
+    ...TypeOperators,
+    ...CollectionOperators
 };
-
-export { CORE_OPERATORS, TYPE_OPERATORS, COLLECTION_OPERATORS };
