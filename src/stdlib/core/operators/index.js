@@ -4,11 +4,13 @@
 import { CoreOperators } from './CoreOperators.js';
 import { MathOperators } from './MathOperators.js';
 import { StringOperators } from './StringOperators.js';
+import { UIOperators } from './UIOperators.js';
 
 export const StandardLibrary = {
     core: CoreOperators,
     math: MathOperators,
-    string: StringOperators
+    string: StringOperators,
+    ui: UIOperators
 };
 
 export function getOperator(operatorName, library = 'core') {
@@ -16,7 +18,6 @@ export function getOperator(operatorName, library = 'core') {
     if (!lib) {
         throw new Error(`Unknown library: ${library}`);
     }
-
     const operators = lib.getOperators();
     return operators[operatorName];
 }
@@ -29,8 +30,8 @@ export function executeOperator(operatorName, input, args = [], context = {}, li
 
     // Handle different library method signatures
     if (lib.executeOperator) {
-        // CoreOperators expects 4 parameters (with context)
-        if (library === 'core') {
+        // CoreOperators and UIOperators expect 4 parameters (with context)
+        if (library === 'core' || library === 'ui') {
             return lib.executeOperator(operatorName, input, args, context);
         } else {
             // String and Math operators expect only 3 parameters (no context)
@@ -49,7 +50,6 @@ export function executeOperator(operatorName, input, args = [], context = {}, li
 
 export function getAllOperators() {
     const allOperators = {};
-    
     for (const [libName, libClass] of Object.entries(StandardLibrary)) {
         const operators = libClass.getOperators();
         for (const [opName, opDef] of Object.entries(operators)) {
@@ -59,7 +59,6 @@ export function getAllOperators() {
             };
         }
     }
-    
     return allOperators;
 }
 
@@ -67,26 +66,30 @@ export class OperatorsRegistry {
     constructor() {
         this.operators = getAllOperators();
     }
-    
+
     getOperator(name, library = 'core') {
         return getOperator(name, library);
     }
-    
+
     executeOperator(name, input, args = [], context = {}, library = 'core') {
         return executeOperator(name, input, args, context, library);
     }
-    
+
     getAllOperators() {
         return getAllOperators();
     }
-    
+
     generateDocumentation() {
         const operators = getAllOperators();
         const categories = {};
         for (const [name, def] of Object.entries(operators)) {
             const lib = def.library || 'core';
             if (!categories[lib]) categories[lib] = [];
-            categories[lib].push({name, type: def.type, description: def.description});
+            categories[lib].push({
+                name,
+                type: def.type,
+                description: def.description
+            });
         }
         return categories;
     }

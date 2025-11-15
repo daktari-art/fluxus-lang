@@ -1,81 +1,159 @@
-# Fluxus Language Specification v4.0
-
-## 🎯 Core Philosophy: Stream-Centric Execution
-
-Fluxus is a **Reactive Stream Language**. A program is a directed graph where data flows along **Streams** (`~`), through **Operators** (`|`), and commits to **Tidal Pools** (`<|>`). Execution is non-sequential; it is driven entirely by asynchronous events.
+### 📄 Updated `SPECIFICATION.md`  
+**Fluxus Language Specification v4.1**  
+*The Reactive Stream Programming Language for the Real-Time World*
 
 ---
 
-## 1. Fundamental Elements (The Core Symbols)
+> **“Programs are dynamic graphs of time-varying values.”**
 
-| Symbol | Name | Type | Description |
-| :--- | :--- | :--- | :--- |
-| **`~`** | **Stream Source (Data)** | Initializer | Starts a finite stream (emits value(s) and completes). |
-| **`~?`** | **Stream Source (Live)** | Initializer | Starts a continuous, time-aware stream (e.g., clock, user input). |
-| **`|`** | **Pipe Operator** | Connector | The universal connector. Passes the output of the preceding element as the primary input to the next operator. |
-| **`{}`** | **The Lens** | Transformation | A block for compact, pure functional logic (map, filter conditions). |
-| **`<|>`** | **Tidal Pool** | State | Declares a named, mutable state container (the only mutable data allowed). |
-| **`->`** | **Pool Read/Flow Start** | Trigger | Reads a pool's value and **starts a new reactive flow** that re-runs when the pool changes. |
-| **`| to_pool()`** | **Pool Write (Commit)** | Sink | The explicit operator used to commit the final value of a stream into a Tidal Pool. |
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  
+[![Node: ≥18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)  
+[![Version: 4.1.0](https://img.shields.io/badge/version-4.1.0-brightgreen)](RELEASE_v4.md)  
+[![CI](https://github.com/daktari-art/fluxus-lang/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daktari-art/fluxus-lang/actions)
 
 ---
 
-## 2. Program Structure
+## 🌊 Core Philosophy
 
-A Fluxus program is a set of zero or more **`FLOW`** imports, followed by state declarations, and finally, one or more **Stream Pipelines**.
+Fluxus treats **all computation as streams of values over time**. Instead of imperative control flow, you declare **reactive dataflow graphs** composed of:
 
-### A. Library Imports
+1. **Streams** (`~`, `~?`)  
+   - `~`: Finite stream (emits once)  
+   - `~?`: Live stream (emits on events: clicks, sensors, timers)
 
-The `FLOW` keyword makes external functionality available as operators or stream sources.
+2. **Operators** (`|`)  
+   - Pure transformations (`map`, `add`)  
+   - Async I/O (`fetch_url`, `hash_sha256`)  
+   - Control flow (`split`, `combine_latest`)
 
-```fluxus
-FLOW network      # Imports 'fetch_url', 'websocket_stream'
-FLOW ui           # Imports 'ui_events', 'ui_render'
-FLOW math         # Imports 'sin', 'cos', 'sq', 'sqrt'
+3. **Tidal Pools** (`<|>`)  
+   - Shared, reactive state  
+   - Automatic subscriber propagation
 
-B. State Declaration (Tidal Pool)
-Pools are globally accessible state containers that must be declared with an initial value.
-let app_config = <|> { theme: 'dark', log_level: 2 }
-let active_users = <|> []
+When data changes, the graph **reactively re-executes only what’s needed**.
 
-C. Functions and Blocks (FUNC)
-A function is a named, reusable stream transformation that receives inputs and must exit to the RESULT sink.
-FUNC clean_and_hash (raw_text: String):
-    ~ raw_text
-    | map { .trim | .to_lower }
-    | hash_sha256()
-    | RESULT # The stream's final output is the function's return value
+---
 
-D. The Pipeline Syntax
-A stream pipeline is a sequence of a Source, one or more Operators, and a final Sink.
-# SOURCE (Live) -> OPERATOR (Filter) -> OPERATOR (Map/Lens) -> SINK (Print)
-~? clock_ms(1000) 
-| filter { .value % 2 == 0 } 
-| map { .value | * 10 } 
-| print() 
+## 🧱 Architecture Overview
 
-3. Standard Library Operators (Built-in)
-These operators are always available and do not require a FLOW statement.
-| Category | Operator | Inputs | Description |
-|---|---|---|---|
-| Control | map | Stream, Lens {} | Transforms every value in the stream using the Lens logic. |
-| Control | filter | Stream, Lens {} | Passes only values that satisfy the Lens condition (true). |
-| Control | debounce | Stream, ms | Emits a value only if the stream has been silent for ms milliseconds. |
-| Control | throttle | Stream, ms | Emits a value at most once every ms milliseconds. |
-| Control | split | Stream, Lens {} | Forks the stream into a TRUE_FLOW and a FALSE_FLOW. |
-| Combination | combine_latest | Stream, Pool(s) | Merges the trigger stream with the latest values from other pools/streams. |
-| I/O | print() | Stream | Outputs the current stream value to the console (a terminal sink). |
-| I/O | to_pool() | Stream, Pool | Commits the stream's result to the specified Tidal Pool (a terminal sink). |
-4. Control Flow and Branching
-Conditional Branching
-The split operator is used to route data based on a condition, replacing traditional if/else logic.
-~ user_data 
-| validate_input() 
-| split { .is_valid } 
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Frontend   │────▶│ Intermediate │────▶│    Runtime   │
+│ (Lexer, AST, │     │ (IR, Opt.)   │     │ (Engine, VM) │
+│  Type Checker)│     └──────────────┘     └──────┬───────┘
+└──────────────┘                                 │
+                                                 ▼
+                                       ┌───────────────────┐
+                                       │ Standard Library  │
+                                       │  (core, ui, net,  │
+                                       │   math, time...)  │
+                                       └─────────┬─────────┘
+                                                 │
+                                       ┌─────────▼─────────┐
+                                       │    Packages       │
+                                       │ (http, sensors,   │
+                                       │  analytics, ...)  │
+                                       └───────────────────┘
+```
 
-| TRUE_FLOW 
-| save_to_db()
+### Key Layers
+- **Frontend**: Parsing, AST, analysis (`src/frontend/`)  
+- **Intermediate**: IR, optimizer (`src/intermediate/`)  
+- **Runtime**: Execution, scheduling (`src/core/engine.js`, `src/runtime/`)  
+- **Stdlib**: Built-in operators (`src/stdlib/`, `src/lib/`)  
+- **Packages**: Domain extensions (`fluxus_packages/`)  
+- **Tooling**: REPL, Debugger, Profiler (`src/cli/`)
 
-| FALSE_FLOW 
-| print_error('Validation failed.')
+---
 
+## 📚 Core Specifications
+
+| Document | Purpose | Status |
+|--------|--------|--------|
+| [`grammar.bnf`](spec/grammar.bnf) | Formal syntax | ✅ Updated |
+| [`semantics.md`](spec/semantics.md) | Execution model | ✅ Updated |
+| [`standard-library.md`](spec/standard-library.md) | Operator contracts | ✅ Updated |
+| [`typesystem.md`](spec/typesystem.md) | Gradual typing | ✅ Updated |
+
+---
+
+## ✅ Implemented in v4.1
+
+### Reactive Core
+- **Non-blocking async execution** (`fetch_url`, `ui_events`)
+- **Tidal Pools** with automatic subscriber propagation
+- **Branching** via `TRUE_FLOW` / `FALSE_FLOW`
+- **Live stream sources** (`~?`) with pluggable adapters
+
+### Standard Library
+- `core`: `print`, `to_pool`, `split`, `map`
+- `ui`: `ui_events(selector, eventType)`
+- `network`: `fetch_url(url, options)`
+- `crypto`: `hash_sha256(input)`
+- `math`, `string`, `time`: Pure transforms
+
+### Tooling & Ecosystem
+- **REPL**: Interactive stream programming
+- **Dashboard**: Visualize stream graphs & pool states
+- **Profiler**: Metrics, ops/sec, success rate
+- **Package System**: `FLOW http` → loads `fluxus_packages/http/`
+
+### Enterprise Features
+- **Metrics**: Operator calls, errors, performance
+- **Graceful shutdown**: Resource cleanup on exit
+- **Configurable**: Log level, execution limits, quiet mode
+- **MIT Licensed**: Free for commercial use
+
+---
+
+## 🚀 Roadmap
+
+| Milestone | Status |
+|---------|--------|
+| Causal debugging & time-travel | 🔄 In progress |
+| Full type inference & validation | 📝 Spec ready |
+| Distributed stream graphs (edge/cloud) | 🗺️ Planned |
+| WASM/FFI integration | 💡 Research |
+| Mobile sensor packages (Termux) | ✅ Working |
+
+> See [`ROADMAP.md`](ROADMAP.md) for full details.
+
+---
+
+## 📦 Package Ecosystem
+
+Extend Fluxus with domain-specific operators:
+```flux
+FLOW http      # REST clients
+FLOW sensors   # Device telemetry  
+FLOW analytics # Stream aggregation
+```
+
+Each package exports an **operator class** compatible with the standard library contract.
+
+---
+
+## 🧠 Tooling Suite
+
+- **REPL**: `npm run repl` — live stream experimentation  
+- **Debugger**: Step-through pipeline execution  
+- **Profiler**: `engine.metrics` + visual dashboard  
+- **Tutorial**: Guided examples in `examples/`
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! See:
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)  
+- [`DEVELOPER.md`](DEVELOPER.md)  
+- [`operator-compatibility.md`](operator-compatibility.md)
+
+Whether you’re building packages, improving the engine, or writing examples — **your input matters**.
+
+---
+
+> **License**: MIT  
+> **Node**: ≥18  
+> **Status**: Production-ready core; enterprise extensions in active development  
+> **Next**: [Get Started](GETTING_STARTED.md) | [View Examples](examples/)
