@@ -93,18 +93,31 @@ export class MathOperators {
             },
 
             // Statistical operators
-            'mean': {
+            // IN YOUR EXISTING MathOperators.js - JUST FIX THESE TWO OPERATORS:
+
+           'mean': {
                 type: 'math',
-                implementation: (arr) => arr.reduce((a, b) => a + b, 0) / arr.length,
-                signature: { input: 'Array', output: 'Number', args: null },
-                description: 'Mean/average of array'
+                implementation: (input, args) => {
+        // FIX: Handle both arrays and single numbers
+                    const arr = Array.isArray(input) ? input : [input];
+                    if (arr.length === 0) return 0;
+                    return arr.reduce((a, b) => a + b, 0) / arr.length;
+                },
+                signature: { input: 'Any', output: 'Number', args: null },
+                description: 'Mean/average of array or value'
+           },
+
+           'sum': {
+                type: 'math', 
+                implementation: (input, args) => {
+        // FIX: Handle both arrays and single numbers  
+                    const arr = Array.isArray(input) ? input : [input];
+                    return arr.reduce((a, b) => a + b, 0);
+               },
+               signature: { input: 'Any', output: 'Number', args: null },
+               description: 'Sum of array or value'
             },
-            'sum': {
-                type: 'math',
-                implementation: (arr) => arr.reduce((a, b) => a + b, 0),
-                signature: { input: 'Array', output: 'Number', args: null },
-                description: 'Sum of array elements'
-            },
+
             'median': {
                 type: 'math',
                 implementation: (arr) => {

@@ -24,6 +24,10 @@
     "dashboard": "node src/cli.js dashboard",
     "profile": "node src/cli.js profile examples/arithmetic.flux",
     "coverage": "c8 node --test test/unit/ test/integration/"
+    "integrate": "node scripts/validate-integration.js --auto-repair",
+    "validate": "node scripts/validate-integration.js --strict",
+    "orchestrate": "node -e \"import('./src/orchestrator.js').then(m => m.getOrchestrator().initialize())\"",
+    "health": "node -e \"import('./src/orchestrator.js').then(async m => { const o = await m.getOrchestrator().initialize(); console.log(o.getHealthStatus()); })\""
   },
   "keywords": [
     "reactive-programming",

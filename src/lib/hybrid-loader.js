@@ -1,5 +1,6 @@
 // FILENAME: src/lib/hybrid-loader.js
-// Fluxus Enterprise Hybrid Library Loader v4.0 - FINAL AMENDMENT (Deadlock Fix)
+// Fluxus Enterprise Hybrid Library Loader v5.0 - PRODUCTION READY
+// ENHANCED WITH SMART LIBRARY DISCOVERY AND DOMAIN SUPPORT
 
 import fs from 'fs/promises';
 import path from 'path';
@@ -9,33 +10,25 @@ import { EventEmitter } from 'events';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * PRODUCTION-GRADE HYBRID LIBRARY LOADER
- *
- * Enterprise Features:
- * - Zero-config library discovery
- * - Graceful fallback mechanisms
- * - Production-ready error handling
- * - Intelligent path resolution
- * - Performance-optimized loading
- * - Comprehensive logging
- */
-
-class ProductionLibraryLoader extends EventEmitter {
+export class FluxusLibraryLoader extends EventEmitter {
     constructor(engine, config = {}) {
         super();
 
         this.engine = engine;
         this.config = {
-            enableSecurity: false, // Disable security checks for now
+            enableSecurity: false,
             enableCaching: true,
             enableMetrics: true,
             debugMode: config.debugMode || false,
+            autoDiscoverDomains: true,
+            quietMode: config.quietMode || false,
             ...config
         };
 
         this.loadedLibraries = new Map();
         this.libraryCache = new Map();
+        this.domainLibraries = new Map();
+        this.libraryRegistry = new Map();
         this.metrics = {
             loads: 0,
             cacheHits: 0,
@@ -43,33 +36,38 @@ class ProductionLibraryLoader extends EventEmitter {
             startTime: performance.now()
         };
 
-
         this.initialized = false;
         this.initializationPromise = this.initializeProductionLoader();
     }
 
     /**
-     * PRODUCTION INITIALIZATION
+     * PRODUCTION INITIALIZATION WITH ENHANCED DOMAIN SUPPORT
      */
     async initializeProductionLoader() {
         try {
-            // Build production library registry with correct paths
+            // Build production library registry
             this.libraryRegistry = await this.buildProductionRegistry();
+
+            // Auto-discover domain libraries
+            if (this.config.autoDiscoverDomains) {
+                await this.discoverDomainLibraries();
+            }
 
             // Preload core libraries for performance
             await this.preloadCoreLibraries();
-            
-            // 🎯 CRITICAL FIX: Set initialized status AFTER preloading is done
-            this.initialized = true; 
+
+            this.initialized = true;
 
             this.emit('initialized', {
                 timestamp: Date.now(),
-                libraryCount: this.libraryRegistry.size
+                libraryCount: this.libraryRegistry.size,
+                domainCount: this.domainLibraries.size
             });
 
-            if (this.config.debugMode) {
+            if (this.config.debugMode && !this.config.quietMode) {
                 console.log('🏢 Production Library Loader initialized');
                 console.log(`   📚 Registered libraries: ${this.libraryRegistry.size}`);
+                console.log(`   🏗️  Domain libraries: ${this.domainLibraries.size}`);
             }
 
         } catch (error) {
@@ -79,7 +77,7 @@ class ProductionLibraryLoader extends EventEmitter {
     }
 
     /**
-     * INTELLIGENT LIBRARY DISCOVERY
+     * ENHANCED LIBRARY DISCOVERY WITH FALLBACK PATHS
      */
     async buildProductionRegistry() {
         const registry = new Map();
@@ -91,25 +89,8 @@ class ProductionLibraryLoader extends EventEmitter {
                 paths: [
                     './core/core.js',
                     './core/index.js',
-                    '../core/core.js'
-                ],
-                category: 'foundation',
-                critical: true
-            },
-            {
-                name: 'types',
-                paths: [
-                    './core/types.js',
-                    '../core/types.js'
-                ],
-                category: 'foundation',
-                critical: true
-            },
-            {
-                name: 'collections',
-                paths: [
-                    './core/collections.js',
-                    '../core/collections.js'
+                    '../core/core.js',
+                    '../../lib/core/core.js'
                 ],
                 category: 'foundation',
                 critical: true
@@ -119,15 +100,26 @@ class ProductionLibraryLoader extends EventEmitter {
                 paths: [
                     './math/math.js',
                     './math/index.js',
-                    '../math/math.js'
+                    '../math/math.js',
+                    '../../lib/math/math.js'
                 ],
                 category: 'standard'
+            },
+            {
+                name: 'collections',
+                paths: [
+                    './core/collections.js',
+                    '../core/collections.js',
+                    '../../lib/core/collections.js'
+                ],
+                category: 'foundation'
             },
             {
                 name: 'string',
                 paths: [
                     './text/string.js',
-                    '../text/string.js'
+                    '../text/string.js',
+                    '../../lib/text/string.js'
                 ],
                 category: 'standard'
             },
@@ -135,9 +127,28 @@ class ProductionLibraryLoader extends EventEmitter {
                 name: 'time',
                 paths: [
                     './time/time.js',
-                    '../time/time.js'
+                    '../time/time.js',
+                    '../../lib/time/time.js'
                 ],
                 category: 'standard'
+            },
+            {
+                name: 'network',
+                paths: [
+                    './network/network.js',
+                    '../network/network.js',
+                    '../../lib/network/network.js'
+                ],
+                category: 'domain'
+            },
+            {
+                name: 'reactive',
+                paths: [
+                    './reactive/reactive.js',
+                    '../reactive/reactive.js',
+                    '../../lib/reactive/reactive.js'
+                ],
+                category: 'domain'
             }
         ];
 
@@ -152,10 +163,10 @@ class ProductionLibraryLoader extends EventEmitter {
                     discovered: true
                 });
 
-                if (this.config.debugMode) {
+                if (this.config.debugMode && !this.config.quietMode) {
                     console.log(`   📍 Discovered ${lib.name} at ${resolvedPath}`);
                 }
-            } else if (lib.critical) {
+            } else if (lib.critical && !this.config.quietMode) {
                 console.warn(`⚠️  Critical library not found: ${lib.name}`);
             }
         }
@@ -164,7 +175,97 @@ class ProductionLibraryLoader extends EventEmitter {
     }
 
     /**
-     * INTELLIGENT PATH RESOLUTION
+     * ENHANCED DOMAIN LIBRARY DISCOVERY
+     */
+    async discoverDomainLibraries() {
+        try {
+            const domainsDir = path.join(__dirname, 'domains');
+
+            try {
+                await fs.access(domainsDir);
+            } catch {
+                if (this.config.debugMode && !this.config.quietMode) {
+                    console.log('   📁 Domains directory not found, skipping domain discovery');
+                }
+                return;
+            }
+
+            const files = await fs.readdir(domainsDir);
+            const domainFiles = files.filter(f => f.endsWith('.js') && !f.startsWith('.'));
+
+            for (const domainFile of domainFiles) {
+                const domainName = domainFile.replace('.js', '');
+                const domainPath = path.join(domainsDir, domainFile);
+
+                try {
+                    const module = await import(`file://${domainPath}`);
+
+                    this.domainLibraries.set(domainName, {
+                        module,
+                        path: domainPath,
+                        discoveredAt: Date.now(),
+                        operators: this.extractOperatorsFromDomain(module)
+                    });
+
+                    if (this.config.debugMode && !this.config.quietMode) {
+                        console.log(`   🏗️  Discovered domain: ${domainName} (${this.domainLibraries.get(domainName).operators.length} operators)`);
+                    }
+
+                } catch (error) {
+                    if (!this.config.quietMode) {
+                        console.warn(`⚠️ Failed to load domain ${domainName}:`, error.message);
+                    }
+                }
+            }
+
+        } catch (error) {
+            if (!this.config.quietMode) {
+                console.warn('⚠️ Domain discovery failed:', error.message);
+            }
+        }
+    }
+
+    /**
+     * ENHANCED DOMAIN REGISTRATION INTERFACE
+     */
+    async registerDomain(domainName, domainModule) {
+        if (this.domainLibraries.has(domainName)) {
+            return true; // Already registered
+        }
+
+        try {
+            const operators = this.extractOperatorsFromDomain(domainModule);
+
+            this.domainLibraries.set(domainName, {
+                module: domainModule,
+                path: 'dynamic',
+                discoveredAt: Date.now(),
+                operators
+            });
+
+            // Auto-register with engine if possible
+            if (domainModule.registerWithEngine && this.engine) {
+                domainModule.registerWithEngine(this.engine);
+            }
+
+            this.emit('domain:registered', { domainName, operators });
+
+            if (this.config.debugMode && !this.config.quietMode) {
+                console.log(`✅ Domain registered: ${domainName} (${operators.length} operators)`);
+            }
+
+            return true;
+
+        } catch (error) {
+            if (!this.config.quietMode) {
+                console.error(`❌ Domain registration failed for ${domainName}:`, error.message);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * INTELLIGENT PATH RESOLUTION WITH FALLBACKS
      */
     async resolveLibraryPath(libraryInfo) {
         for (const libPath of libraryInfo.paths) {
@@ -183,15 +284,15 @@ class ProductionLibraryLoader extends EventEmitter {
     }
 
     /**
-     * PRODUCTION LIBRARY LOADING
+     * ENHANCED LIBRARY LOADING WITH OPERATOR EXTRACTION
      */
     async loadLibrary(libraryName, options = {}) {
         const loadId = `load_${Date.now()}_${libraryName}`;
         const startTime = performance.now();
 
         this.metrics.loads++;
-        
-        // 🎯 DEADLOCK FIX: Wait for the main initialization promise only if it's not complete
+
+        // Wait for initialization
         if (!this.initialized && this.initializationPromise) {
             await this.initializationPromise;
         }
@@ -205,15 +306,17 @@ class ProductionLibraryLoader extends EventEmitter {
                 return cached;
             }
 
-            // Get library info
+            // Try domain libraries first
+            if (this.domainLibraries.has(libraryName)) {
+                const domain = this.domainLibraries.get(libraryName);
+                this.libraryCache.set(libraryName, domain.module);
+                return domain.module;
+            }
+
+            // Then try standard libraries
             const libraryInfo = this.libraryRegistry.get(libraryName);
             if (!libraryInfo) {
                 throw new Error(`Library '${libraryName}' not found in registry`);
-            }
-
-            // Skip security checks if disabled
-            if (this.config.enableSecurity) {
-                // Security validation would go here
             }
 
             // Load library implementation
@@ -240,7 +343,7 @@ class ProductionLibraryLoader extends EventEmitter {
                 cached: false
             });
 
-            if (this.config.debugMode) {
+            if (this.config.debugMode && !this.config.quietMode) {
                 console.log(`📦 Loaded ${libraryName} in ${loadTime.toFixed(2)}ms`);
             }
 
@@ -257,7 +360,6 @@ class ProductionLibraryLoader extends EventEmitter {
                 loadId
             });
 
-            // Enhanced error handling with context
             const enhancedError = new Error(`Failed to load library '${libraryName}': ${error.message}`);
             enhancedError.library = libraryName;
             enhancedError.code = 'LIBRARY_LOAD_ERROR';
@@ -304,7 +406,7 @@ class ProductionLibraryLoader extends EventEmitter {
      * PERFORMANCE-OPTIMIZED CORE PRELOADING
      */
     async preloadCoreLibraries() {
-        const coreLibraries = ['core', 'types', 'collections'];
+        const coreLibraries = ['core', 'math', 'collections'];
         const preloadPromises = [];
 
         for (const libName of coreLibraries) {
@@ -312,7 +414,9 @@ class ProductionLibraryLoader extends EventEmitter {
                 preloadPromises.push(
                     this.loadLibrary(libName).catch(error => {
                         // Log but don't fail initialization for non-critical errors
-                        console.warn(`⚠️  Preload failed for ${libName}:`, error.message);
+                        if (!this.config.quietMode) {
+                            console.warn(`⚠️  Preload failed for ${libName}:`, error.message);
+                        }
                     })
                 );
             }
@@ -320,13 +424,81 @@ class ProductionLibraryLoader extends EventEmitter {
 
         await Promise.allSettled(preloadPromises);
 
-        if (this.config.debugMode) {
+        if (this.config.debugMode && !this.config.quietMode) {
             console.log(`   🔄 Preloaded ${preloadPromises.length} core libraries`);
         }
     }
 
     /**
-     * PRODUCTION METRICS AND MONITORING
+     * DOMAIN-SPECIFIC METHODS
+     */
+    extractOperatorsFromDomain(domainModule) {
+        const operators = [];
+
+        if (domainModule.IOT_OPERATORS) {
+            operators.push(...Object.keys(domainModule.IOT_OPERATORS));
+        }
+        if (domainModule.default && typeof domainModule.default === 'object') {
+            operators.push(...Object.keys(domainModule.default));
+        }
+        if (domainModule.getOperators) {
+            operators.push(...Object.keys(domainModule.getOperators()));
+        }
+        if (domainModule.operators) {
+            operators.push(...Object.keys(domainModule.operators));
+        }
+
+        return operators;
+    }
+
+    getDomainOperators(domainName) {
+        const domain = this.domainLibraries.get(domainName);
+        return domain ? domain.operators : [];
+    }
+
+    getAllDomains() {
+        return Array.from(this.domainLibraries.keys());
+    }
+
+    async loadDomainLibrary(domainName) {
+        return this.loadLibrary(domainName);
+    }
+
+    /**
+     * EXECUTE OPERATOR FROM LOADED LIBRARIES
+     */
+    async executeOperator(operatorName, inputData, args, context) {
+        // Find which library contains this operator
+        for (const [libName, libModule] of this.loadedLibraries.entries()) {
+            const exports = libModule.exports;
+            
+            if (exports && exports.operators && exports.operators[operatorName]) {
+                return await exports.operators[operatorName](inputData, args, context);
+            }
+            
+            if (exports && exports[operatorName] && typeof exports[operatorName] === 'function') {
+                return await exports[operatorName](inputData, args, context);
+            }
+        }
+
+        // Try domain libraries
+        for (const [domainName, domain] of this.domainLibraries.entries()) {
+            const module = domain.module;
+            
+            if (module.operators && module.operators[operatorName]) {
+                return await module.operators[operatorName](inputData, args, context);
+            }
+            
+            if (module[operatorName] && typeof module[operatorName] === 'function') {
+                return await module[operatorName](inputData, args, context);
+            }
+        }
+
+        throw new Error(`Operator ${operatorName} not found in any loaded library`);
+    }
+
+    /**
+     * ENHANCED METRICS WITH DOMAIN INFO
      */
     getMetrics() {
         const uptime = performance.now() - this.metrics.startTime;
@@ -342,22 +514,33 @@ class ProductionLibraryLoader extends EventEmitter {
             successRate: `${successRate.toFixed(1)}%`,
             cacheEfficiency: `${cacheEfficiency.toFixed(1)}%`,
             uptime: `${(uptime / 1000).toFixed(1)}s`,
-            loadedLibraries: this.loadedLibraries.size
+            loadedLibraries: this.loadedLibraries.size,
+            domainLibraries: this.domainLibraries.size,
+            totalOperators: this.calculateTotalOperators()
         };
     }
 
+    calculateTotalOperators() {
+        let total = 0;
+        for (const domain of this.domainLibraries.values()) {
+            total += domain.operators.length;
+        }
+        return total;
+    }
+
     /**
-     * PRODUCTION DIAGNOSTICS
+     * ENHANCED DIAGNOSTICS WITH DOMAIN INFO
      */
     async diagnose() {
         const diagnosis = {
             status: 'healthy',
             libraries: {},
+            domains: {},
             issues: [],
             recommendations: []
         };
 
-        // Check all registered libraries
+        // Check standard libraries
         for (const [name, info] of this.libraryRegistry) {
             try {
                 const fullPath = path.join(__dirname, info.path);
@@ -381,9 +564,21 @@ class ProductionLibraryLoader extends EventEmitter {
             }
         }
 
+        // Check domain libraries
+        for (const [name, domain] of this.domainLibraries) {
+            diagnosis.domains[name] = {
+                status: 'registered',
+                operators: domain.operators.length,
+                path: domain.path
+            };
+        }
+
         // Generate recommendations
         if (diagnosis.issues.length > 0) {
             diagnosis.recommendations.push('Run fluxus doctor to fix library issues');
+        }
+        if (this.domainLibraries.size === 0) {
+            diagnosis.recommendations.push('Consider adding domain libraries for extended functionality');
         }
 
         return diagnosis;
@@ -397,8 +592,9 @@ class ProductionLibraryLoader extends EventEmitter {
 
         // Clear caches
         this.libraryCache.clear();
+        this.domainLibraries.clear();
 
-        if (this.config.debugMode) {
+        if (this.config.debugMode && !this.config.quietMode) {
             const metrics = this.getMetrics();
             console.log('🛑 Library loader shutdown');
             console.log(`   📊 Final metrics:`, metrics);
@@ -406,5 +602,4 @@ class ProductionLibraryLoader extends EventEmitter {
     }
 }
 
-// Export production-grade loader
-export { ProductionLibraryLoader as FluxusLibraryLoader };
+export default FluxusLibraryLoader;
