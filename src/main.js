@@ -1,15 +1,14 @@
 // FILENAME: src/main.js  
-// Fluxus Main Entry Point v4.1 - WITH ORCHESTRATOR INTEGRATION
-
-import { getOrchestrator } from './orchestrator.js';
+// Fluxus Main Entry Point v4.2 - SMART ENGINE INTEGRATION
 
 export class FluxusCompiler {
     constructor(options = {}) {
         this.options = {
-            useNewArchitecture: options.useNewArchitecture ?? true, // DEFAULT TO NEW ARCHITECTURE
+            useNewArchitecture: options.useNewArchitecture ?? true,
             forceLegacy: options.forceLegacy ?? false,
             debug: options.debug ?? false,
-            enableOrchestrator: options.enableOrchestrator ?? true, // NEW: Orchestrator integration
+            enableSmartLibrarySelection: options.enableSmartLibrarySelection ?? true, // SMART ENGINE
+            enableMetrics: options.enableMetrics ?? true,
             ...options
         };
 
@@ -18,28 +17,27 @@ export class FluxusCompiler {
             startTime: Date.now()
         };
 
-        this.orchestrator = null;
         this.printWelcome();
     }
 
     printWelcome() {
         if (!this.options.debug) return;
         
-        console.log('\n✨ Fluxus Language Compiler v4.1');
-        console.log('   🚀 Enterprise Architecture with Orchestrator Integration');
+        console.log('\n✨ Fluxus Language Compiler v4.2');
+        console.log('   🧠 Smart Engine with Library Selection');
         console.log('');
     }
 
     /**
-     * MAIN COMPILATION WITH ORCHESTRATOR SUPPORT
+     * MAIN COMPILATION WITH SMART ENGINE
      */
     async compile(source, filename = '<anonymous>') {
         this.stats.compilations++;
         
         try {
-            // Use orchestrator by default for production
-            if (this.options.enableOrchestrator) {
-                return await this.compileWithOrchestrator(source, filename);
+            // Use Smart Engine by default
+            if (this.options.enableSmartLibrarySelection) {
+                return await this.compileWithSmartEngine(source, filename);
             }
 
             // Fallback to legacy if explicitly disabled
@@ -47,7 +45,7 @@ export class FluxusCompiler {
                 return await this.compileLegacy(source, filename);
             }
 
-            return await this.compileWithOrchestrator(source, filename);
+            return await this.compileWithSmartEngine(source, filename);
 
         } catch (error) {
             console.error('💥 Compilation failed:', error.message);
@@ -56,50 +54,48 @@ export class FluxusCompiler {
     }
 
     /**
-     * PRODUCTION COMPILATION WITH ORCHESTRATOR
+     * PRODUCTION COMPILATION WITH SMART ENGINE
      */
-    async compileWithOrchestrator(source, filename) {
+    async compileWithSmartEngine(source, filename) {
         if (this.options.debug) {
-            console.log('🎯 Using orchestrator for compilation...');
+            console.log('🧠 Using Smart Engine for compilation...');
         }
 
         try {
-            // Initialize orchestrator if needed
-            if (!this.orchestrator) {
-                this.orchestrator = await getOrchestrator({
-                    enableMetrics: true,
-                    autoRegisterDomains: true,
-                    debugMode: this.options.debug
-                }).initialize();
-            }
-
             // Parse source to AST
             const { GraphParser } = await import('./core/parser.js');
             const parser = new GraphParser();
             const ast = parser.parse(source);
             
-            // Execute with orchestrator
-            const result = await this.orchestrator.executeProgram(ast, {
-                filename,
-                debug: this.options.debug
+            // Initialize Smart Engine
+            const { RuntimeEngine } = await import('./core/engine.js');
+            const engine = new RuntimeEngine({
+                enableSmartLibrarySelection: this.options.enableSmartLibrarySelection,
+                enableMetrics: this.options.enableMetrics,
+                debugMode: this.options.debug,
+                quietMode: !this.options.debug
             });
 
+            // Execute with Smart Engine
+            await engine.start(ast);
+
             if (this.options.debug) {
-                const health = this.orchestrator.getHealthStatus();
-                console.log(`✅ Orchestrator compilation completed`);
-                console.log(`   📊 Domains: ${health.domains.loaded}, Operators: ${health.operators.total}`);
+                const stats = engine.getEngineStats();
+                console.log(`✅ Smart Engine compilation completed`);
+                console.log(`   📊 Library Selections:`, stats.metrics.librarySelections);
+                console.log(`   ⚡ Operators: ${stats.metrics.operatorCalls}`);
             }
 
             return {
                 result: "Compilation successful",
-                executionEngine: 'orchestrator',
+                executionEngine: 'smart_engine',
                 stats: this.getStats(),
-                orchestratorStats: this.orchestrator.getHealthStatus()
+                engineStats: engine.getEngineStats()
             };
 
         } catch (error) {
             if (this.options.debug) {
-                console.log('⚠️ Orchestrator failed, falling back to legacy:', error.message);
+                console.log('⚠️ Smart Engine failed, falling back to legacy:', error.message);
             }
             return await this.compileLegacy(source, filename);
         }
@@ -121,7 +117,8 @@ export class FluxusCompiler {
             const { RuntimeEngine } = await import('./core/engine.js');
             const engine = new RuntimeEngine({ 
                 debugMode: this.options.debug,
-                quietMode: !this.options.debug 
+                quietMode: !this.options.debug,
+                enableSmartLibrarySelection: false // Force legacy mode
             });
             
             await engine.start(ast);
@@ -156,7 +153,7 @@ export class FluxusCompiler {
     }
 
     /**
-     * ENHANCED STATS WITH ORCHESTRATOR INFO
+     * ENHANCED STATS WITH SMART ENGINE INFO
      */
     getStats() {
         const now = Date.now();
@@ -165,28 +162,15 @@ export class FluxusCompiler {
             uptime: now - this.stats.startTime
         };
 
-        if (this.orchestrator) {
-            const health = this.orchestrator.getHealthStatus();
-            baseStats.orchestrator = {
-                domains: health.domains.loaded,
-                operators: health.operators.total,
-                status: health.status
-            };
-        }
-
         return baseStats;
     }
 
     printReport() {
         const stats = this.getStats();
-        console.log('\n📊 Fluxus Compilation Report:');
+        console.log('\n📊 Fluxus Smart Engine Report:');
         console.log(`   📝 Total compilations: ${stats.compilations}`);
         console.log(`   ⏱️ Uptime: ${stats.uptime}ms`);
-        
-        if (stats.orchestrator) {
-            console.log(`   🏗️  Domains: ${stats.orchestrator.domains}`);
-            console.log(`   ⚡ Operators: ${stats.orchestrator.operators}`);
-        }
+        console.log(`   🧠 Smart Engine: ${this.options.enableSmartLibrarySelection ? '✅ Enabled' : '❌ Disabled'}`);
     }
 
     /**
@@ -195,24 +179,22 @@ export class FluxusCompiler {
     async diagnose() {
         const diagnosis = {
             compiler: this.getStats(),
+            smartEngine: this.options.enableSmartLibrarySelection,
             recommendations: []
         };
 
-        if (!this.orchestrator) {
-            diagnosis.recommendations.push('Enable orchestrator for production features');
-        }
-
-        if (this.options.forceLegacy) {
-            diagnosis.recommendations.push('Consider using orchestrator instead of legacy mode');
+        if (!this.options.enableSmartLibrarySelection) {
+            diagnosis.recommendations.push('Enable smart engine for optimal performance');
         }
 
         return diagnosis;
     }
 }
 
-// Enhanced singleton with orchestrator
+// Smart Engine singleton
 export const fluxusCompiler = new FluxusCompiler({ 
-    enableOrchestrator: true,
+    enableSmartLibrarySelection: true,
+    enableMetrics: true,
     debug: process.env.NODE_ENV !== 'production'
 });
 
@@ -222,27 +204,21 @@ export async function compileFluxus(source, options = {}) {
     return compiler.compile(source);
 }
 
-// NEW: Orchestrator access
-export { getOrchestrator };
-
-// Enhanced CLI export
-export { fluxusCompiler as compiler };
+// Smart Engine factory
+export function createSmartEngine(options = {}) {
+    const { RuntimeEngine } = require('./core/engine.js');
+    return new RuntimeEngine({
+        enableSmartLibrarySelection: true,
+        enableMetrics: true,
+        ...options
+    });
+}
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-    const orchestrator = getOrchestrator();
-    if (orchestrator) {
-        await orchestrator.gracefulShutdown(0);
-    } else {
-        process.exit(0);
-    }
+    process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-    const orchestrator = getOrchestrator();
-    if (orchestrator) {
-        await orchestrator.gracefulShutdown(0);
-    } else {
-        process.exit(0);
-    }
+    process.exit(0);
 });

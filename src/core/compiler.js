@@ -1,5 +1,5 @@
 // FILENAME: src/core/compiler.js
-// Fluxus Language Compiler v4.3 - INTEGRATED STANDARD LIBRARY
+// Fluxus Language Compiler v4.4 - SMART ENGINE INTEGRATION
 
 import { OperatorsRegistry } from '../stdlib/core/operators/index.js';
 
@@ -19,63 +19,72 @@ export class Compiler {
         };
 
         this.knownLibraryOperators = new Set(Object.keys(this.operatorSignature));
-        
+
+        // Enhanced library mapping for Smart Engine
         this.libraryMap = {
-            'math': ['sin', 'cos', 'tan', 'sqrt', 'pow', 'log', 'exp', 'abs', 'floor', 'ceil', 'round', 
-                    'max', 'min', 'random', 'mean', 'median', 'sum', 'stddev', 'variance', 'square', 
-                    'power', 'greater_than', 'less_than', 'equal_to', 'stream_sum', 'stream_average'],
-            'string': ['capitalize', 'reverse', 'replace', 'substring', 'contains', 'starts_with', 
-                      'ends_with', 'split_lines', 'pad_left', 'pad_right', 'length', 'match', 'test', 
+            'core': ['add', 'subtract', 'multiply', 'divide', 'print', 'to_pool'],
+            'math_advanced': ['sin', 'cos', 'tan', 'sqrt', 'pow', 'log', 'exp', 'abs', 'floor', 'ceil', 'round',
+                            'max', 'min', 'random', 'mean', 'median', 'sum', 'stddev', 'variance'],
+            'string': ['capitalize', 'reverse', 'replace', 'substring', 'contains', 'starts_with',
+                      'ends_with', 'split_lines', 'pad_left', 'pad_right', 'length', 'match', 'test',
                       'repeat', 'encode_base64', 'decode_base64', 'escape_html', 'sanitize'],
-            'time': ['now', 'performance_now', 'timestamp', 'add_milliseconds', 'add_seconds', 
-                    'add_minutes', 'add_hours', 'format_time', 'to_iso_string', 'to_locale_string', 
-                    'time_diff', 'time_since', 'time_until', 'delay', 'throttle', 'debounce', 
-                    'temporal_map', 'with_timing', 'interval', 'timeout'],
-            'collections': ['length', 'get', 'set', 'keys', 'values', 'merge', 'slice', 'first', 'last', 'find'],
-            'types': ['type_of', 'is_array', 'is_object', 'is_string', 'is_number', 'is_boolean', 
-                     'cast_string', 'cast_number', 'cast_boolean', 'type_check']
+            'collections': ['map', 'filter', 'reduce', 'group_by', 'sort_by', 'aggregate'],
+            'time': ['delay', 'schedule', 'timestamp'],
+            'reactive': ['lens_transform', 'pool_subscribe', 'stream_combine']
         };
 
         this.compiledProgram = {
-            version: '4.3.0',
+            version: '4.4.0',
             libraries: new Set(),
             operators: [],
             typeChecks: [],
-            warnings: []
+            warnings: [],
+            smartEngine: true
         };
     }
 
     buildOperatorSignature() {
         const allOperators = this.operatorsRegistry.getAllOperators();
         const signature = {};
-        
+
         for (const [name, op] of Object.entries(allOperators)) {
             signature[name] = op.signature;
         }
-        
+
+        // Enhanced signatures for Smart Engine
+        signature['max'] = { input: 'Array', output: 'Number', args: [] };
+        signature['min'] = { input: 'Array', output: 'Number', args: [] };
+        signature['mean'] = { input: 'Array', output: 'Number', args: [] };
+        signature['sum'] = { input: 'Array', output: 'Number', args: [] };
+        signature['median'] = { input: 'Array', output: 'Number', args: [] };
+
         return signature;
     }
 
     compile(ast) {
-        console.log('🔧 Compiling Fluxus program with Standard Library...');
-        
+        console.log('🔧 Compiling Fluxus program with Smart Engine...');
+
         this.compiledProgram = {
-            version: '4.3.0',
+            version: '4.4.0',
             libraries: new Set(),
             operators: [],
             typeChecks: [],
-            warnings: []
+            warnings: [],
+            smartEngine: true
         };
 
         this.resolveLibraries(ast);
         this.compileNodes(ast);
         this.optimizePipeline();
         
+        // Add Smart Engine recommendations
+        this.addSmartEngineRecommendations();
+
         return this.compiledProgram;
     }
 
     resolveLibraries(ast) {
-        const libraryImports = ast.nodes?.filter(node => 
+        const libraryImports = ast.nodes?.filter(node =>
             node.type === 'IMPORT_STATEMENT' && node.libraryName
         ) || [];
 
@@ -87,6 +96,31 @@ export class Compiler {
             } else {
                 this.compiledProgram.warnings.push(`Unknown library: ${libName}`);
             }
+        }
+
+        // Auto-detect library usage for Smart Engine
+        this.autoDetectLibraries(ast);
+    }
+
+    autoDetectLibraries(ast) {
+        const detectedLibs = new Set();
+        
+        if (ast.nodes) {
+            ast.nodes.forEach(node => {
+                if (node.type === 'FUNCTION_OPERATOR') {
+                    const opName = node.name.split('(')[0].trim();
+                    
+                    for (const [lib, operators] of Object.entries(this.libraryMap)) {
+                        if (operators.includes(opName) && !this.compiledProgram.libraries.has(lib)) {
+                            detectedLibs.add(lib);
+                        }
+                    }
+                }
+            });
+        }
+
+        if (detectedLibs.size > 0) {
+            console.log(`🔍 Smart Engine detected libraries: ${Array.from(detectedLibs).join(', ')}`);
         }
     }
 
@@ -140,7 +174,8 @@ export class Compiler {
                 signature: signature,
                 args: node.args || [],
                 position: node.position,
-                library: this.findOperatorLibrary(node.operator)
+                library: this.findOperatorLibrary(node.operator),
+                complexity: this.calculateOperatorComplexity(node.operator, signature)
             };
 
             // Add type check for this operator
@@ -186,11 +221,12 @@ export class Compiler {
             const signature = this.operatorSignature[node.name];
             const operator = {
                 type: 'function-call',
-                name: node.name,  // ✅ ADD THIS LINE
+                name: node.name,
                 signature: signature,
                 args: node.args || [],
                 position: node.position,
-                library: this.findOperatorLibrary(node.name)
+                library: this.findOperatorLibrary(node.name),
+                complexity: this.calculateOperatorComplexity(node.name, signature)
             };
 
             this.compiledProgram.operators.push(operator);
@@ -210,18 +246,31 @@ export class Compiler {
         this.compiledProgram.operators.push(operator);
     }
 
+    calculateOperatorComplexity(operatorName, signature) {
+        // Simple complexity scoring for Smart Engine
+        let score = 1;
+        
+        if (signature.input === 'Array') score += 1;
+        if (signature.output === 'Array') score += 1;
+        if (operatorName.includes('map') || operatorName.includes('reduce') || operatorName.includes('filter')) score += 2;
+        if (operatorName.startsWith('sin') || operatorName.startsWith('cos') || operatorName.startsWith('tan')) score += 2;
+        if (operatorName.includes('analyze') || operatorName.includes('predict')) score += 3;
+        
+        return Math.min(score, 5); // Scale to 1-5
+    }
+
     optimizePipeline() {
         const optimizedOperators = [];
-        
+
         for (let i = 0; i < this.compiledProgram.operators.length; i++) {
             const current = this.compiledProgram.operators[i];
             const next = this.compiledProgram.operators[i + 1];
-            
+
             // Skip no-op transformations
             if (current.type === 'transformation' && current.name === 'identity') {
                 continue;
             }
-            
+
             // Combine consecutive maps
             if (current.type === 'lens-operator' && next?.type === 'lens-operator' &&
                 current.lensType === 'map' && next.lensType === 'map') {
@@ -233,21 +282,41 @@ export class Compiler {
                 i++;
                 continue;
             }
-            
+
             optimizedOperators.push(current);
         }
-        
+
         this.compiledProgram.operators = optimizedOperators;
-        
+
         if (optimizedOperators.length < this.compiledProgram.operators.length) {
             console.log(`⚡ Optimized pipeline: ${this.compiledProgram.operators.length} → ${optimizedOperators.length} operators`);
+        }
+    }
+
+    addSmartEngineRecommendations() {
+        const recommendations = [];
+        const operatorCounts = {};
+        
+        this.compiledProgram.operators.forEach(op => {
+            if (op.library) {
+                operatorCounts[op.library] = (operatorCounts[op.library] || 0) + 1;
+            }
+        });
+
+        if (operatorCounts['math_advanced'] > 3) {
+            recommendations.push('Heavy math usage detected - Smart Engine will use advanced math library');
+        }
+
+        if (recommendations.length > 0) {
+            console.log('💡 Smart Engine Recommendations:');
+            recommendations.forEach(rec => console.log(`   ${rec}`));
         }
     }
 
     validateTypeCompatibility(operatorName, inputType, expectedType) {
         if (expectedType === 'Any') return true;
         if (inputType === 'Any') return true;
-        
+
         const compatibility = {
             'Number': ['Number'],
             'String': ['String'],
@@ -257,7 +326,7 @@ export class Compiler {
             'Stream': ['Stream', 'Event'],
             'PoolName': ['PoolName']
         };
-        
+
         const allowedTypes = compatibility[expectedType] || [expectedType];
         return allowedTypes.includes(inputType);
     }
@@ -281,12 +350,13 @@ export class Compiler {
 
     generateRuntimeCode(compiledProgram) {
         const lines = [];
-        
-        lines.push('// Generated Fluxus Runtime Code');
+
+        lines.push('// Generated Fluxus Runtime Code - Smart Engine');
         lines.push(`// Version: ${compiledProgram.version}`);
+        lines.push(`// Smart Engine: ${compiledProgram.smartEngine ? 'Enabled' : 'Disabled'}`);
         lines.push(`// Libraries: ${Array.from(compiledProgram.libraries).join(', ')}`);
         lines.push('');
-        
+
         // Add library imports
         if (compiledProgram.libraries.size > 0) {
             lines.push('// Imported Libraries:');
@@ -295,7 +365,7 @@ export class Compiler {
             }
             lines.push('');
         }
-        
+
         // Generate operator sequence
         lines.push('// Operator Pipeline:');
         for (const op of compiledProgram.operators) {
@@ -314,7 +384,7 @@ export class Compiler {
                     break;
             }
         }
-        
+
         return lines.join('\n');
     }
 
@@ -333,7 +403,7 @@ export class Compiler {
         for (const node of ast.nodes) {
             if (node.type === 'PIPELINE_OPERATOR' || node.type === 'FUNCTION_OPERATOR') {
                 const operatorName = node.operator || node.functionName;
-                
+
                 if (!this.knownLibraryOperators.has(operatorName)) {
                     errors.push({
                         message: `Unknown operator: ${operatorName}`,
@@ -344,7 +414,7 @@ export class Compiler {
                 }
 
                 const signature = this.operatorSignature[operatorName];
-                
+
                 // Basic signature validation
                 if (signature.args && node.args && node.args.length > 0) {
                     // Could add more detailed argument validation here
@@ -363,6 +433,36 @@ export class Compiler {
                 validationWarnings: warnings.length
             }
         };
+    }
+
+    // New method: Get Smart Engine recommendations
+    getSmartEngineRecommendations(ast) {
+        const recommendations = [];
+        const complexityScore = this.calculateProgramComplexity(ast);
+        
+        if (complexityScore > 7) {
+            recommendations.push('High complexity program - Smart Engine will prefer advanced libraries');
+        }
+        
+        return recommendations;
+    }
+
+    calculateProgramComplexity(ast) {
+        let score = 0;
+        
+        if (ast.nodes) {
+            ast.nodes.forEach(node => {
+                if (node.type === 'FUNCTION_OPERATOR') {
+                    const opName = node.name.split('(')[0].trim();
+                    const signature = this.operatorSignature[opName];
+                    if (signature) {
+                        score += this.calculateOperatorComplexity(opName, signature);
+                    }
+                }
+            });
+        }
+        
+        return Math.min(score, 10);
     }
 }
 

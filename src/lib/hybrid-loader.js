@@ -1,6 +1,6 @@
-// FILENAME: src/lib/hybrid-loader.js
-// Fluxus Enterprise Hybrid Library Loader v5.0 - PRODUCTION READY
-// ENHANCED WITH SMART LIBRARY DISCOVERY AND DOMAIN SUPPORT
+//// FILENAME: src/lib/hybrid-loader.js
+// Fluxus Enterprise Hybrid Library Loader v5.0 - LIB MIGRATION COMPLETE
+// UPDATED FOR LIB-ONLY OPERATION
 
 import fs from 'fs/promises';
 import path from 'path';
@@ -41,11 +41,11 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * PRODUCTION INITIALIZATION WITH ENHANCED DOMAIN SUPPORT
+     * PRODUCTION INITIALIZATION WITH LIB-ONLY PATHS
      */
     async initializeProductionLoader() {
         try {
-            // Build production library registry
+            // Build production library registry with LIB paths only
             this.libraryRegistry = await this.buildProductionRegistry();
 
             // Auto-discover domain libraries
@@ -77,20 +77,19 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * ENHANCED LIBRARY DISCOVERY WITH FALLBACK PATHS
+     * ENHANCED LIBRARY DISCOVERY WITH LIB-ONLY PATHS
      */
     async buildProductionRegistry() {
         const registry = new Map();
 
-        // Core libraries with multiple fallback paths
+        // Core libraries with LIB paths only
         const coreLibraries = [
             {
                 name: 'core',
                 paths: [
-                    './core/core.js',
+                    './core/operators/index.js',           // CHANGED: lib/core/operators
                     './core/index.js',
-                    '../core/core.js',
-                    '../../lib/core/core.js'
+                    './core/core.js'
                 ],
                 category: 'foundation',
                 critical: true
@@ -98,10 +97,32 @@ export class FluxusLibraryLoader extends EventEmitter {
             {
                 name: 'math',
                 paths: [
-                    './math/math.js',
-                    './math/index.js',
-                    '../math/math.js',
-                    '../../lib/math/math.js'
+                    './math/index.js',                     // CHANGED: lib/math
+                    './math/math.js'
+                ],
+                category: 'standard'
+            },
+            {
+                name: 'math_basic',
+                paths: [
+                    './math/basic/index.js',               // NEW: lib/math/basic
+                    './math/basic.js'
+                ],
+                category: 'standard'
+            },
+            {
+                name: 'math_advanced',
+                paths: [
+                    './math/index.js',                     // CHANGED: lib/math
+                    './math/math.js'
+                ],
+                category: 'standard'
+            },
+            {
+                name: 'text',
+                paths: [
+                    './text/index.js',                     // NEW: lib/text
+                    './text/string.js'
                 ],
                 category: 'standard'
             },
@@ -109,44 +130,63 @@ export class FluxusLibraryLoader extends EventEmitter {
                 name: 'collections',
                 paths: [
                     './core/collections.js',
-                    '../core/collections.js',
-                    '../../lib/core/collections.js'
+                    './data/collections.js'
                 ],
                 category: 'foundation'
             },
             {
-                name: 'string',
-                paths: [
-                    './text/string.js',
-                    '../text/string.js',
-                    '../../lib/text/string.js'
-                ],
-                category: 'standard'
-            },
-            {
                 name: 'time',
                 paths: [
-                    './time/time.js',
-                    '../time/time.js',
-                    '../../lib/time/time.js'
+                    './time/index.js',                     // CHANGED: lib/time
+                    './time/time.js'
                 ],
                 category: 'standard'
             },
             {
                 name: 'network',
                 paths: [
-                    './network/network.js',
-                    '../network/network.js',
-                    '../../lib/network/network.js'
+                    './network/index.js',                  // CHANGED: lib/network
+                    './network/network.js'
                 ],
                 category: 'domain'
             },
             {
                 name: 'reactive',
                 paths: [
-                    './reactive/reactive.js',
-                    '../reactive/reactive.js',
-                    '../../lib/reactive/reactive.js'
+                    './reactive/index.js',                 // CHANGED: lib/reactive
+                    './reactive/reactive.js'
+                ],
+                category: 'domain'
+            },
+            {
+                name: 'analytics',
+                paths: [
+                    './domains/analytics.js',              // CHANGED: lib/domains/analytics
+                    './analytics/index.js'
+                ],
+                category: 'domain'
+            },
+            {
+                name: 'health',
+                paths: [
+                    './domains/health.js',                 // CHANGED: lib/domains/health
+                    './health/index.js'
+                ],
+                category: 'domain'
+            },
+            {
+                name: 'iot',
+                paths: [
+                    './domains/iot.js',                    // CHANGED: lib/domains/iot
+                    './iot/index.js'
+                ],
+                category: 'domain'
+            },
+            {
+                name: 'security',
+                paths: [
+                    './security/index.js',                 // NEW: lib/security
+                    './security/security.js'
                 ],
                 category: 'domain'
             }
@@ -175,7 +215,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * ENHANCED DOMAIN LIBRARY DISCOVERY
+     * ENHANCED DOMAIN LIBRARY DISCOVERY - LIB ONLY
      */
     async discoverDomainLibraries() {
         try {
@@ -226,46 +266,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * ENHANCED DOMAIN REGISTRATION INTERFACE
-     */
-    async registerDomain(domainName, domainModule) {
-        if (this.domainLibraries.has(domainName)) {
-            return true; // Already registered
-        }
-
-        try {
-            const operators = this.extractOperatorsFromDomain(domainModule);
-
-            this.domainLibraries.set(domainName, {
-                module: domainModule,
-                path: 'dynamic',
-                discoveredAt: Date.now(),
-                operators
-            });
-
-            // Auto-register with engine if possible
-            if (domainModule.registerWithEngine && this.engine) {
-                domainModule.registerWithEngine(this.engine);
-            }
-
-            this.emit('domain:registered', { domainName, operators });
-
-            if (this.config.debugMode && !this.config.quietMode) {
-                console.log(`✅ Domain registered: ${domainName} (${operators.length} operators)`);
-            }
-
-            return true;
-
-        } catch (error) {
-            if (!this.config.quietMode) {
-                console.error(`❌ Domain registration failed for ${domainName}:`, error.message);
-            }
-            return false;
-        }
-    }
-
-    /**
-     * INTELLIGENT PATH RESOLUTION WITH FALLBACKS
+     * INTELLIGENT PATH RESOLUTION - LIB ONLY WITH FALLBACKS
      */
     async resolveLibraryPath(libraryInfo) {
         for (const libPath of libraryInfo.paths) {
@@ -279,12 +280,35 @@ export class FluxusLibraryLoader extends EventEmitter {
             }
         }
 
-        // No path found
-        return null;
+        // No path found - try direct lib path as last resort
+        const directPath = `./${libraryInfo.name}/index.js`;
+        try {
+            const fullPath = path.join(__dirname, directPath);
+            await fs.access(fullPath);
+            return directPath;
+        } catch {
+            return null;
+        }
     }
 
     /**
-     * ENHANCED LIBRARY LOADING WITH OPERATOR EXTRACTION
+     * RESOLVE LIBRARY PATH FOR ENGINE INTEGRATION
+     */
+    resolveLibraryPathForEngine(libraryName, libraryInfo) {
+        // ALL paths now resolve to lib directory
+        const basePaths = {
+            'lib': './',  // All libraries are in lib/ now
+            'stdlib': './' // Redirect stdlib to lib for compatibility
+        };
+
+        const basePath = basePaths[libraryInfo.type] || './';
+        const libraryPath = libraryInfo.path || libraryName;
+        
+        return `${basePath}${libraryPath}`;
+    }
+
+    /**
+     * ENHANCED LIBRARY LOADING WITH LIB-ONLY OPERATOR EXTRACTION
      */
     async loadLibrary(libraryName, options = {}) {
         const loadId = `load_${Date.now()}_${libraryName}`;
@@ -369,7 +393,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * ROBUST LIBRARY IMPLEMENTATION LOADING
+     * ROBUST LIBRARY IMPLEMENTATION LOADING - LIB ONLY
      */
     async loadLibraryImplementation(libraryName, libraryInfo, options) {
         try {
@@ -389,6 +413,24 @@ export class FluxusLibraryLoader extends EventEmitter {
                 throw new Error('Library must export an object or have a default export');
             }
 
+            // Special handling for core operators
+            if (libraryName === 'core' && exports.getAllOperators) {
+                return {
+                    operators: exports.getAllOperators(),
+                    getOperators: exports.getOperators,
+                    executeOperator: exports.executeOperator
+                };
+            }
+
+            // Handle domain registration
+            if (exports.registerWithEngine && this.engine && options.registerWithEngine !== false) {
+                try {
+                    exports.registerWithEngine(this.engine);
+                } catch (regError) {
+                    console.warn(`⚠️ Domain registration failed for ${libraryName}:`, regError.message);
+                }
+            }
+
             return exports;
 
         } catch (error) {
@@ -403,10 +445,10 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * PERFORMANCE-OPTIMIZED CORE PRELOADING
+     * PERFORMANCE-OPTIMIZED CORE PRELOADING - LIB ONLY
      */
     async preloadCoreLibraries() {
-        const coreLibraries = ['core', 'math', 'collections'];
+        const coreLibraries = ['core', 'math', 'math_basic', 'text'];
         const preloadPromises = [];
 
         for (const libName of coreLibraries) {
@@ -430,7 +472,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * DOMAIN-SPECIFIC METHODS
+     * DOMAIN-SPECIFIC METHODS - UPDATED FOR LIB
      */
     extractOperatorsFromDomain(domainModule) {
         const operators = [];
@@ -442,10 +484,19 @@ export class FluxusLibraryLoader extends EventEmitter {
             operators.push(...Object.keys(domainModule.default));
         }
         if (domainModule.getOperators) {
-            operators.push(...Object.keys(domainModule.getOperators()));
+            const domainOps = domainModule.getOperators();
+            if (typeof domainOps === 'object') {
+                operators.push(...Object.keys(domainOps));
+            }
         }
         if (domainModule.operators) {
             operators.push(...Object.keys(domainModule.operators));
+        }
+        if (domainModule.MATH_OPERATORS) {
+            operators.push(...Object.keys(domainModule.MATH_OPERATORS));
+        }
+        if (domainModule.STATS_OPERATORS) {
+            operators.push(...Object.keys(domainModule.STATS_OPERATORS));
         }
 
         return operators;
@@ -465,7 +516,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * EXECUTE OPERATOR FROM LOADED LIBRARIES
+     * EXECUTE OPERATOR FROM LOADED LIBRARIES - LIB ONLY
      */
     async executeOperator(operatorName, inputData, args, context) {
         // Find which library contains this operator
@@ -478,6 +529,15 @@ export class FluxusLibraryLoader extends EventEmitter {
             
             if (exports && exports[operatorName] && typeof exports[operatorName] === 'function') {
                 return await exports[operatorName](inputData, args, context);
+            }
+
+            // Handle core operator registry
+            if (exports && exports.executeOperator && typeof exports.executeOperator === 'function') {
+                try {
+                    return await exports.executeOperator(operatorName, inputData, args, context);
+                } catch {
+                    // Continue to next library
+                }
             }
         }
 
@@ -498,7 +558,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * ENHANCED METRICS WITH DOMAIN INFO
+     * ENHANCED METRICS WITH LIB INFO
      */
     getMetrics() {
         const uptime = performance.now() - this.metrics.startTime;
@@ -516,7 +576,8 @@ export class FluxusLibraryLoader extends EventEmitter {
             uptime: `${(uptime / 1000).toFixed(1)}s`,
             loadedLibraries: this.loadedLibraries.size,
             domainLibraries: this.domainLibraries.size,
-            totalOperators: this.calculateTotalOperators()
+            totalOperators: this.calculateTotalOperators(),
+            libraryRegistry: this.libraryRegistry.size
         };
     }
 
@@ -529,7 +590,7 @@ export class FluxusLibraryLoader extends EventEmitter {
     }
 
     /**
-     * ENHANCED DIAGNOSTICS WITH DOMAIN INFO
+     * ENHANCED DIAGNOSTICS WITH LIB PATHS
      */
     async diagnose() {
         const diagnosis = {
@@ -537,10 +598,11 @@ export class FluxusLibraryLoader extends EventEmitter {
             libraries: {},
             domains: {},
             issues: [],
-            recommendations: []
+            recommendations: [],
+            libMigration: 'complete' // NEW: Track lib migration status
         };
 
-        // Check standard libraries
+        // Check standard libraries - LIB ONLY
         for (const [name, info] of this.libraryRegistry) {
             try {
                 const fullPath = path.join(__dirname, info.path);
@@ -548,13 +610,15 @@ export class FluxusLibraryLoader extends EventEmitter {
                 diagnosis.libraries[name] = {
                     status: 'available',
                     path: info.path,
-                    category: info.category
+                    category: info.category,
+                    location: 'lib' // NEW: All in lib now
                 };
             } catch (error) {
                 diagnosis.libraries[name] = {
                     status: 'missing',
                     path: info.path,
-                    error: error.message
+                    error: error.message,
+                    location: 'lib'
                 };
 
                 if (info.critical) {
@@ -564,21 +628,21 @@ export class FluxusLibraryLoader extends EventEmitter {
             }
         }
 
-        // Check domain libraries
+        // Check domain libraries - LIB ONLY
         for (const [name, domain] of this.domainLibraries) {
             diagnosis.domains[name] = {
                 status: 'registered',
                 operators: domain.operators.length,
-                path: domain.path
+                path: domain.path,
+                location: 'lib'
             };
         }
 
-        // Generate recommendations
-        if (diagnosis.issues.length > 0) {
-            diagnosis.recommendations.push('Run fluxus doctor to fix library issues');
-        }
-        if (this.domainLibraries.size === 0) {
-            diagnosis.recommendations.push('Consider adding domain libraries for extended functionality');
+        // Generate recommendations for lib migration
+        const missingLibs = Object.values(diagnosis.libraries).filter(lib => lib.status === 'missing');
+        if (missingLibs.length > 0) {
+            diagnosis.recommendations.push('Run file migration: mv src/stdlib/core/operators/ src/lib/core/');
+            diagnosis.recommendations.push('Update imports in engine and related files');
         }
 
         return diagnosis;
@@ -599,6 +663,28 @@ export class FluxusLibraryLoader extends EventEmitter {
             console.log('🛑 Library loader shutdown');
             console.log(`   📊 Final metrics:`, metrics);
         }
+    }
+
+    /**
+     * NEW: LIB MIGRATION HELPER
+     */
+    getLibMigrationStatus() {
+        const status = {
+            libLibraries: this.libraryRegistry.size,
+            loadedLibraries: this.loadedLibraries.size,
+            domainLibraries: this.domainLibraries.size,
+            allPathsResolvedToLib: true
+        };
+
+        // Verify all paths point to lib
+        for (const [name, info] of this.libraryRegistry) {
+            if (!info.path.startsWith('./') || info.path.includes('../stdlib')) {
+                status.allPathsResolvedToLib = false;
+                break;
+            }
+        }
+
+        return status;
     }
 }
 
