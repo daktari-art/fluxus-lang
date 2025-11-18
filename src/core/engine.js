@@ -1,11 +1,11 @@
 // FILENAME: src/core/engine.js
-// Fluxus Enterprise Runtime Engine v15.0 - COMPLETE STREAM PROCESSING
+// Fluxus Enterprise Runtime Engine v15.0 - COMPLETE LIB MIGRATION
 
 import { FluxusPackageManager } from '../package-manager.js';
 import { FluxusLibraryLoader } from '../lib/hybrid-loader.js';
-import { OperatorsRegistry } from '../stdlib/core/operators/index.js';
+import { OperatorsRegistry } from '../lib/core/operators/index.js'; // CHANGED: lib instead of stdlib
 import { EventEmitter } from 'events';
-import { setUIAdapter as _setUIAdapter } from '../stdlib/core/operators/ui/ui_events.js';
+import { setUIAdapter as _setUIAdapter } from '../lib/core/operators/ui/ui_events.js'; // CHANGED
 import { performance } from 'perf_hooks';
 
 export class RuntimeEngine extends EventEmitter {
@@ -486,26 +486,31 @@ export class RuntimeEngine extends EventEmitter {
     buildComprehensiveLibraries() {
         const libraries = new Map();
 
+        // ========== ALL LIBRARIES NOW USE 'lib' TYPE ==========
+        
+        // CORE OPERATORS - NOW IN LIB
         libraries.set('core', {
-            path: 'stdlib/core/operators',
-            type: 'stdlib',
+            path: 'core/operators',
+            type: 'lib',
             complexity: 'simple',
             domain: 'core',
             operators: ['map', 'filter', 'reduce', 'print', 'to_pool', 'identity', 'tap'],
             description: 'Core stream processing operators'
         });
 
+        // BASIC MATH - NOW IN LIB
         libraries.set('math_basic', {
-            path: 'stdlib/core/operators',
-            type: 'stdlib', 
+            path: 'math/basic',
+            type: 'lib',
             complexity: 'simple',
             domain: 'math',
             operators: ['add', 'subtract', 'multiply', 'divide'],
             description: 'Basic arithmetic operations'
         });
 
+        // ADVANCED MATH - ALREADY IN LIB
         libraries.set('math_advanced', {
-            path: 'lib/math',
+            path: 'math',
             type: 'lib',
             complexity: 'medium',
             domain: 'math',
@@ -513,8 +518,19 @@ export class RuntimeEngine extends EventEmitter {
             description: 'Advanced mathematical operations'
         });
 
+        // TEXT OPERATIONS - NOW IN LIB
+        libraries.set('text', {
+            path: 'text',
+            type: 'lib',
+            complexity: 'simple',
+            domain: 'text',
+            operators: ['concat', 'split', 'trim', 'to_upper', 'to_lower', 'capitalize', 'reverse'],
+            description: 'Text processing operations'
+        });
+
+        // DOMAIN LIBRARIES - ALREADY IN LIB
         libraries.set('analytics', {
-            path: 'lib/domains/analytics',
+            path: 'domains/analytics',
             type: 'lib',
             complexity: 'high',
             domain: 'analytics',
@@ -523,8 +539,8 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('health', {
-            path: 'lib/domains/health',
-            type: 'lib', 
+            path: 'domains/health',
+            type: 'lib',
             complexity: 'high',
             domain: 'health',
             operators: ['health_monitor', 'vital_signs', 'medical_alert'],
@@ -532,7 +548,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('iot', {
-            path: 'lib/domains/iot',
+            path: 'domains/iot',
             type: 'lib',
             complexity: 'high',
             domain: 'iot',
@@ -541,7 +557,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('network', {
-            path: 'lib/network',
+            path: 'network',
             type: 'lib',
             complexity: 'high',
             domain: 'network',
@@ -550,7 +566,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('security', {
-            path: 'lib/security',
+            path: 'security',
             type: 'lib',
             complexity: 'high',
             domain: 'security',
@@ -559,7 +575,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('reactive', {
-            path: 'lib/reactive',
+            path: 'reactive',
             type: 'lib',
             complexity: 'medium',
             domain: 'reactive',
@@ -568,7 +584,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('time', {
-            path: 'lib/time',
+            path: 'time',
             type: 'lib',
             complexity: 'medium',
             domain: 'time',
@@ -714,6 +730,8 @@ export class RuntimeEngine extends EventEmitter {
         }
     }
 
+    // ========== LIBRARY SELECTION AND EXECUTION ==========
+
     async executeFunctionOperator(node, inputData) {
         const operatorName = this.cleanOperatorName(node.name);
         const args = node.args ? node.args.map(arg => this.parseLiteralValue(arg)) : [];
@@ -852,6 +870,8 @@ export class RuntimeEngine extends EventEmitter {
 
         throw new Error(`Advanced library operator not found: ${operatorName}`);
     }
+
+    // ========== CORE OPERATOR INITIALIZATION ==========
 
     async initializeCoreOperators() {
         const allOperators = this.operatorsRegistry.getAllOperators();
