@@ -860,4 +860,58 @@ if (typeof Math.lgamma === 'undefined') {
     };
 }
 
+// Add this line to export MathUtils
+export const MathUtils = new MathOperators();
+
+// ==================== INDIVIDUAL EXPORTS FOR BACKWARD COMPATIBILITY ====================
+
+// Export individual operators as named exports
+export const sin = FLUXUS_MATH_OPERATORS.sin.implementation;
+export const cos = FLUXUS_MATH_OPERATORS.cos.implementation;
+export const tan = FLUXUS_MATH_OPERATORS.tan.implementation;
+export const asin = trigonometry.asin;
+export const acos = trigonometry.acos;
+export const atan = trigonometry.atan;
+export const atan2 = trigonometry.atan2;
+
+export const add = FLUXUS_MATH_OPERATORS.add.implementation;
+export const subtract = FLUXUS_MATH_OPERATORS.subtract.implementation;
+export const multiply = FLUXUS_MATH_OPERATORS.multiply.implementation;
+export const divide = FLUXUS_MATH_OPERATORS.divide.implementation;
+export const sqrt = FLUXUS_MATH_OPERATORS.sqrt.implementation;
+export const power = FLUXUS_MATH_OPERATORS.power.implementation;
+export const square = FLUXUS_MATH_OPERATORS.square.implementation;
+export const abs = FLUXUS_MATH_OPERATORS.abs.implementation;
+export const round = FLUXUS_MATH_OPERATORS.round.implementation;
+export const ceil = FLUXUS_MATH_OPERATORS.ceil.implementation;
+export const floor = FLUXUS_MATH_OPERATORS.floor.implementation;
+export const random = FLUXUS_MATH_OPERATORS.random.implementation;
+export const random_int = FLUXUS_MATH_OPERATORS.random_int.implementation;
+export const greater_than = FLUXUS_MATH_OPERATORS.greater_than.implementation;
+export const less_than = FLUXUS_MATH_OPERATORS.less_than.implementation;
+export const equal_to = FLUXUS_MATH_OPERATORS.equal_to.implementation;
+export const mean = FLUXUS_MATH_OPERATORS.mean.implementation;
+export const median = FLUXUS_MATH_OPERATORS.median.implementation;
+export const std_dev = FLUXUS_MATH_OPERATORS.std_dev.implementation;
+export const stream_sum = FLUXUS_MATH_OPERATORS.stream_sum.implementation;
+export const stream_average = FLUXUS_MATH_OPERATORS.stream_average.implementation;
+
+// Additional functions that your example uses
+export const pow = FLUXUS_MATH_OPERATORS.power.implementation;
+export const log = (input, args, context) => Math.log(FLUXUS_MATH_OPERATORS.toNumber(input));
+export const exp = (input, args, context) => Math.exp(FLUXUS_MATH_OPERATORS.toNumber(input));
+export const max = (input, args, context) => {
+    if (Array.isArray(input)) {
+        return Math.max(...input.map(FLUXUS_MATH_OPERATORS.toNumber));
+    }
+    return FLUXUS_MATH_OPERATORS.toNumber(input);
+};
+export const min = (input, args, context) => {
+    if (Array.isArray(input)) {
+        return Math.min(...input.map(FLUXUS_MATH_OPERATORS.toNumber));
+    }
+    return FLUXUS_MATH_OPERATORS.toNumber(input);
+};
+export const sum = FLUXUS_MATH_OPERATORS.stream_sum.implementation;
+
 export default FLUXUS_MATH_OPERATORS;

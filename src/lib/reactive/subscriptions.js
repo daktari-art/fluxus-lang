@@ -6,7 +6,7 @@
  * and controlling data flow in reactive systems
  */
 
-export const SUBSCRIPTION_OPERATORS = {
+export const ReactiveSubscriptions = {
     /**
      * Debounce subscription updates to prevent excessive recalculations
      * @param {any} input - Stream input

@@ -599,5 +599,10 @@ export class LibraryConflictResolver {
     }
 }
 
+export const resolveLibraryConflict = async (dependencyName, conflict, options = {}) => {
+    const resolver = new LibraryConflictResolver(options.strategy);
+    return await resolver.resolveConflict(dependencyName, conflict, options);
+};
+
 // Export default instance
 export const conflictResolver = new LibraryConflictResolver();

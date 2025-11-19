@@ -3,9 +3,10 @@
 
 import { FluxusPackageManager } from '../package-manager.js';
 import { FluxusLibraryLoader } from '../lib/hybrid-loader.js';
-import { OperatorsRegistry } from '../lib/core/operators/index.js'; // CHANGED: lib instead of stdlib
+import { OperatorsRegistry } from '../lib/index.js'; // CHANGED: lib instead of stdlib
 import { EventEmitter } from 'events';
-import { setUIAdapter as _setUIAdapter } from '../lib/core/operators/ui/ui_events.js'; // CHANGED
+//import { setUIAdapter as _setUIAdapter } from '../lib/core/operators/ui/ui_events.js'; // CHANGED
+import { UI_OPERATORS } from '../lib/domains/ui.js';
 import { performance } from 'perf_hooks';
 
 export class RuntimeEngine extends EventEmitter {

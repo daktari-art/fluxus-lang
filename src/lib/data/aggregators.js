@@ -6,7 +6,7 @@
  * These operators maintain state across multiple stream events
  */
 
-export const AGGREGATOR_OPERATORS = {
+export const DataAggregators = {
     /**
      * Count events in a sliding time window
      * @param {any} input - Stream input

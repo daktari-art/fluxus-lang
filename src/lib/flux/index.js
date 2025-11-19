@@ -282,6 +282,131 @@ export const analyticsMiddleware = (tracker = console.log) => (store) => (next) 
     return result;
 };
 
+// FIXED: throttleMiddleware for action throttling
+export const throttleMiddleware = (throttleMs = 1000) => {
+    return (store) => {
+        return (next) => {
+            const throttledActions = new Map();
+            
+            return (action) => {
+                const now = Date.now();
+                const lastCall = throttledActions.get(action.type);
+                
+                // If action was called recently, throttle it
+                if (lastCall && now - lastCall < throttleMs) {
+                    console.log(`⏰ Throttled action: ${action.type}`);
+                    return; // Skip the action
+                }
+                
+                // Update last call time and proceed
+                throttledActions.set(action.type, now);
+                return next(action);
+            };
+        };
+    };
+};
+
+// FIXED: debounceMiddleware for action debouncing
+export const debounceMiddleware = (debounceMs = 300) => {
+    return (store) => {
+        return (next) => {
+            const timeouts = new Map();
+            
+            return (action) => {
+                // Clear existing timeout for this action type
+                if (timeouts.has(action.type)) {
+                    clearTimeout(timeouts.get(action.type));
+                }
+                
+                // Set new timeout
+                const timeoutId = setTimeout(() => {
+                    timeouts.delete(action.type);
+                    next(action);
+                }, debounceMs);
+                
+                timeouts.set(action.type, timeoutId);
+            };
+        };
+    };
+};
+
+// FIXED: batchMiddleware for action batching
+export const batchMiddleware = (store) => {
+    return (next) => {
+        let batch = [];
+        let batchTimeout = null;
+        
+        return (action) => {
+            if (action.type === 'BATCH_ACTIONS') {
+                // Process batched actions
+                action.payload.forEach(batchedAction => next(batchedAction));
+                return;
+            }
+            
+            // Check if action should be batched
+            if (action.meta && action.meta.batch) {
+                batch.push(action);
+                
+                // Clear existing timeout
+                if (batchTimeout) {
+                    clearTimeout(batchTimeout);
+                }
+                
+                // Set new timeout to process batch
+                batchTimeout = setTimeout(() => {
+                    if (batch.length > 0) {
+                        next({
+                            type: 'BATCH_ACTIONS',
+                            payload: [...batch],
+                            meta: { batchSize: batch.length }
+                        });
+                        batch = [];
+                    }
+                }, action.meta.batchDelay || 0);
+                
+                return;
+            }
+            
+            // Normal action processing
+            return next(action);
+        };
+    };
+};
+
+// FIXED: retryMiddleware for action retries
+export const retryMiddleware = (maxRetries = 3) => {
+    return (store) => {
+        return (next) => {
+            return (action) => {
+                if (!action.meta || !action.meta.retry) {
+                    return next(action);
+                }
+                
+                let retries = 0;
+                
+                const attempt = () => {
+                    try {
+                        return next(action);
+                    } catch (error) {
+                        retries++;
+                        
+                        if (retries < maxRetries) {
+                            console.log(`🔄 Retrying action ${action.type} (attempt ${retries + 1}/${maxRetries})`);
+                            return attempt();
+                        } else {
+                            console.error(`❌ Action ${action.type} failed after ${maxRetries} attempts`);
+                            throw error;
+                        }
+                    }
+                };
+                
+                return attempt();
+            };
+        };
+    };
+};
+
+
 // Utility functions
 export function createStore(reducer, preloadedState, enhancer) {
     if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {
@@ -440,5 +565,9 @@ export default {
     loggerMiddleware,
     thunkMiddleware,
     crashReporterMiddleware,
-    analyticsMiddleware
+    analyticsMiddleware,
+    throttleMiddleware,    // ADD THIS
+    debounceMiddleware,    // ADD THIS  
+    batchMiddleware,       // ADD THIS
+    retryMiddleware        // ADD THIS
 };

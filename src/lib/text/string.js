@@ -388,4 +388,6 @@ export const STRING_LENS_UTILITIES = {
     replace: (str, search, replacement) => String(str).replaceAll(search, replacement)
 };
 
+export const StringOperators = FLUXUS_STRING_OPERATORS;
+
 export default FLUXUS_STRING_OPERATORS;

@@ -677,6 +677,8 @@ export class LibrarySecurityManager {
     }
 }
 
+export const SecurityManager = LibrarySecurityManager;
+
 // Export a default instance for convenience
 export const securityManager = new LibrarySecurityManager();
 

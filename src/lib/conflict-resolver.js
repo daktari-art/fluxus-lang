@@ -600,4 +600,45 @@ export class LibraryConflictResolver {
     }
 }
 
+// ADD THIS - Export resolveLibraryConflict function for backward compatibility
+export const resolveLibraryConflict = async (dependencyName, conflict, options = {}) => {
+    const resolver = new LibraryConflictResolver(options.strategy);
+    return await resolver.resolveConflict(dependencyName, conflict, options);
+};
+
+// ADD THIS - Export resolveOperatorConflict function for operator conflicts
+export const resolveOperatorConflict = async (operatorName, conflict, options = {}) => {
+    const resolver = new LibraryConflictResolver(options.strategy || 'smart');
+    
+    // Operator-specific conflict resolution
+    const operatorConflict = {
+        required: conflict.required,
+        existing: conflict.existing,
+        libraries: conflict.libraries || [operatorName],
+        type: 'operator',
+        operator: operatorName
+    };
+    
+    const resolution = await resolver.resolveConflict(operatorName, operatorConflict, options);
+    
+    // Add operator-specific metadata
+    return {
+        ...resolution,
+        operator: operatorName,
+        resolutionType: 'operator_conflict',
+        impact: await assessOperatorImpact(operatorName, resolution.selectedVersion)
+    };
+};
+
+// Helper function for operator impact assessment
+async function assessOperatorImpact(operatorName, selectedVersion) {
+    // Simulate operator impact analysis
+    return {
+        breakingChanges: false,
+        performanceImpact: 'minimal',
+        compatibility: 'high',
+        affectedFlows: []
+    };
+}
+
 export default LibraryConflictResolver;

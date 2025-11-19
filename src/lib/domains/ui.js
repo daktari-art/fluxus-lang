@@ -719,4 +719,85 @@ class StyleEngine {
     }
 }
 
+// Domain Registration Function
+export const registerWithEngine = (engine) => {
+    console.log('🎨 Registering UI Domain...');
+    
+    const operators = {
+        'render_component': (data, [componentType, props]) => ({ 
+            componentId: `comp_${Date.now()}`,
+            type: componentType,
+            props: props,
+            rendered: true,
+            domain: 'ui'
+        }),
+        'update_props': (data, [componentId, newProps]) => ({
+            componentId: componentId,
+            updated: true,
+            newProps: newProps,
+            domain: 'ui'
+        }),
+        'handle_event': (data, [eventType, handler, options]) => ({
+            handlerId: `handler_${Date.now()}`,
+            eventType: eventType,
+            bound: true,
+            domain: 'ui'
+        }),
+        'bind_data': (data, [componentId, dataSource]) => ({
+            bindingId: `binding_${Date.now()}`,
+            componentId: componentId,
+            dataSource: dataSource,
+            active: true,
+            domain: 'ui'
+        }),
+        'apply_style': (data, [componentId, styleRules]) => ({
+            componentId: componentId,
+            stylesApplied: Object.keys(styleRules),
+            domain: 'ui'
+        }),
+        'create_layout': (data, [layoutType, children]) => ({
+            layoutId: `layout_${Date.now()}`,
+            type: layoutType,
+            childrenCount: children.length,
+            domain: 'ui'
+        }),
+        'animate': (data, [componentId, animation, duration]) => ({
+            animationId: `anim_${Date.now()}`,
+            componentId: componentId,
+            duration: duration || 300,
+            state: 'running',
+            domain: 'ui'
+        }),
+        'manage_state': (data, [stateKey, initialValue]) => ({
+            stateKey: stateKey,
+            initialValue: initialValue,
+            created: true,
+            domain: 'ui'
+        }),
+        'create_form': (data, [formSchema, onSubmit]) => ({
+            formId: `form_${Date.now()}`,
+            fields: Object.keys(formSchema),
+            state: 'idle',
+            domain: 'ui'
+        }),
+        'responsive_breakpoint': (data, [breakpoints]) => ({
+            breakpoints: breakpoints || { sm: 640, md: 768, lg: 1024, xl: 1280 },
+            current: 'lg',
+            active: true,
+            domain: 'ui'
+        })
+    };
+    
+    let count = 0;
+    for (const [name, implementation] of Object.entries(operators)) {
+        if (!engine.operators.has(name)) {
+            engine.operators.set(name, implementation);
+            count++;
+        }
+    }
+    
+    console.log(`   ✅ UI Domain registered: ${count} operators`);
+    return count;
+};
+
 export default UI_OPERATORS;

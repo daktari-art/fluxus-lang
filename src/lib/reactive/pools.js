@@ -14,7 +14,7 @@ import { performance } from 'perf_hooks';
  * - Stream-pool integration
  */
 
-export const FLUXUS_REACTIVE_OPERATORS = {
+export const ReactivePools = {
     // ==================== POOL MANAGEMENT OPERATORS ====================
     
     'create_pool': {

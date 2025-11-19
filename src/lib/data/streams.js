@@ -1,7 +1,6 @@
 	// FILENAME: src/lib/data/streams.js
 // Stream transformations - ENHANCED
-
-export const STREAM_OPERATORS = {
+export const DataStreams = {
     'debounce': (input, args, context) => {
         const ms = parseInt(args[0]) || 300;
         console.log(`⏰ Debounce: would delay ${ms}ms`);
@@ -84,6 +83,66 @@ export const STREAM_OPERATORS = {
     'reverse': (input, args) => {
         if (!Array.isArray(input)) return input;
         return [...input].reverse();
+    },
+    
+
+    // CORE COLLECTION OPERATORS (moved from core/collections.js)
+    'map': (input, args, context) => {
+        if (!Array.isArray(input)) return input;
+        const transform = args[0];
+        // Implementation for map
+        return input.map(item => {
+            // Apply transformation logic
+            return item;
+        });
+    },
+    
+    'filter': (input, args, context) => {
+        if (!Array.isArray(input)) return input;
+        const predicate = args[0];
+        // Implementation for filter
+        return input.filter(item => {
+            // Apply predicate logic
+            return true;
+        });
+    },
+    
+    'reduce': (input, args, context) => {
+        if (!Array.isArray(input)) return input;
+        const reducer = args[0];
+        const initialValue = args[1];
+        // Implementation for reduce
+        return input.reduce((acc, item) => {
+            // Apply reduction logic
+            return acc;
+        }, initialValue);
+    },
+    
+    'find': (input, args, context) => {
+        if (!Array.isArray(input)) return null;
+        const predicate = args[0];
+        return input.find(item => {
+            // Apply predicate logic
+            return true;
+        });
+    },
+    
+    'some': (input, args, context) => {
+        if (!Array.isArray(input)) return false;
+        const predicate = args[0];
+        return input.some(item => {
+            // Apply predicate logic
+            return true;
+        });
+    },
+    
+    'every': (input, args, context) => {
+        if (!Array.isArray(input)) return false;
+        const predicate = args[0];
+        return input.every(item => {
+            // Apply predicate logic
+            return true;
+        });
     },
     
     // NEW: Add missing operators

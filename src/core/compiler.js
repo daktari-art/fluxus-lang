@@ -1,7 +1,7 @@
 // FILENAME: src/core/compiler.js
 // Fluxus Language Compiler v4.4 - SMART ENGINE INTEGRATION
 
-import { OperatorsRegistry } from '../lib/core/operators/index.js';
+import { OperatorsRegistry } from '../lib/index.js';
 
 export class Compiler {
     constructor() {

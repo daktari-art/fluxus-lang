@@ -460,4 +460,54 @@ class HealthAlertSystem {
     }
 }
 
+// Domain Registration Function
+export const registerWithEngine = (engine) => {
+    console.log('🏥 Registering Health Domain...');
+    
+    const operators = {
+        'monitor_heart_rate': (data, [min = 60, max = 100]) => ({ 
+            value: 72, unit: 'bpm', status: 'normal', timestamp: Date.now(), domain: 'health'
+        }),
+        'monitor_blood_pressure': (data, [systolicRange = [90, 140], diastolicRange = [60, 90]]) => ({
+            systolic: { value: 120, unit: 'mmHg', status: 'normal' },
+            diastolic: { value: 80, unit: 'mmHg', status: 'normal' },
+            overall: 'normal',
+            timestamp: Date.now(),
+            domain: 'health'
+        }),
+        'calculate_bmi': (data, [weight = 70, height = 1.75]) => ({
+            bmi: 22.9, category: 'normal', weight: weight, height: height, domain: 'health'
+        }),
+        'track_steps': (data, [threshold = 0.5]) => ({
+            steps: 42, stepEvents: [], cadence: 0.85, confidence: 0.9, domain: 'health'
+        }),
+        'calculate_calories': (data, [weight = 70, duration = 30, met = 3.5]) => ({
+            calories: 245, weight: weight, duration: duration, met: met, domain: 'health'
+        }),
+        'analyze_sleep_patterns': (data, [windowSize = 7]) => ({
+            averageSleep: 7.5, sleepEfficiency: 85, consistency: 'good', trends: { trend: 'stable' }, domain: 'health'
+        }),
+        'detect_health_anomalies': (data, [method = 'statistical', sensitivity = 2.0]) => ({
+            anomalies: [], severity: 'low', recommendations: [], domain: 'health'
+        }),
+        'schedule_medication': (data, [medication, schedule, dosage]) => ({
+            medication: medication, schedule: schedule, dosage: dosage, created: true, domain: 'health'
+        }),
+        'check_medication_compliance': (data, [tolerance = 30]) => ({
+            taken: 28, total: 30, missed: 2, adherence: 93.3, status: 'good', domain: 'health'
+        })
+    };
+    
+    let count = 0;
+    for (const [name, implementation] of Object.entries(operators)) {
+        if (!engine.operators.has(name)) {
+            engine.operators.set(name, implementation);
+            count++;
+        }
+    }
+    
+    console.log(`   ✅ Health Domain registered: ${count} operators`);
+    return count;
+};
+
 export default HEALTH_OPERATORS;

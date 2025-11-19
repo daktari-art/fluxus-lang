@@ -6,7 +6,7 @@
  * Lenses provide functional, composable ways to transform nested data structures
  */
 
-export const LENS_OPERATORS = {
+export const ReactiveLenses = {
     /**
      * Compose multiple lenses into a single transformation pipeline
      * @param {any} input - Stream input

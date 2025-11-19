@@ -6,7 +6,7 @@
  * Transducers separate transformation logic from iteration for better performance
  */
 
-export const TRANSDUCER_OPERATORS = {
+export const DataTransducers = {
     /**
      * Compose multiple transducers into a single transformation pipeline
      * @param {any} input - Stream input
