@@ -491,7 +491,7 @@ export class RuntimeEngine extends EventEmitter {
         
         // CORE OPERATORS - NOW IN LIB
         libraries.set('core', {
-            path: 'core/operators',
+            path: 'lib/index.js',
             type: 'lib',
             complexity: 'simple',
             domain: 'core',
@@ -501,7 +501,7 @@ export class RuntimeEngine extends EventEmitter {
 
         // BASIC MATH - NOW IN LIB
         libraries.set('math_basic', {
-            path: 'math/basic',
+            path: 'lib/math/math.js',
             type: 'lib',
             complexity: 'simple',
             domain: 'math',
@@ -511,7 +511,7 @@ export class RuntimeEngine extends EventEmitter {
 
         // ADVANCED MATH - ALREADY IN LIB
         libraries.set('math_advanced', {
-            path: 'math',
+            path: 'lib/math/math.js',
             type: 'lib',
             complexity: 'medium',
             domain: 'math',
@@ -521,7 +521,7 @@ export class RuntimeEngine extends EventEmitter {
 
         // TEXT OPERATIONS - NOW IN LIB
         libraries.set('text', {
-            path: 'text',
+            path: 'lib/text/string.js',
             type: 'lib',
             complexity: 'simple',
             domain: 'text',
@@ -531,7 +531,7 @@ export class RuntimeEngine extends EventEmitter {
 
         // DOMAIN LIBRARIES - ALREADY IN LIB
         libraries.set('analytics', {
-            path: 'domains/analytics',
+            path: 'lib/domains/analytics.js',
             type: 'lib',
             complexity: 'high',
             domain: 'analytics',
@@ -540,7 +540,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('health', {
-            path: 'domains/health',
+            path: 'lib/domains/health.js',
             type: 'lib',
             complexity: 'high',
             domain: 'health',
@@ -549,7 +549,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('iot', {
-            path: 'domains/iot',
+            path: 'lib/domains/iot.js',
             type: 'lib',
             complexity: 'high',
             domain: 'iot',
@@ -558,7 +558,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('network', {
-            path: 'network',
+            path: 'lib/network/http.js',
             type: 'lib',
             complexity: 'high',
             domain: 'network',
@@ -567,7 +567,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('security', {
-            path: 'security',
+            path: 'lib/security-manager.js',
             type: 'lib',
             complexity: 'high',
             domain: 'security',
@@ -576,7 +576,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('reactive', {
-            path: 'reactive',
+            path: 'lib/reactive/pools.js',
             type: 'lib',
             complexity: 'medium',
             domain: 'reactive',
@@ -585,7 +585,7 @@ export class RuntimeEngine extends EventEmitter {
         });
 
         libraries.set('time', {
-            path: 'time',
+            path: 'lib/time/time.js',
             type: 'lib',
             complexity: 'medium',
             domain: 'time',
@@ -876,7 +876,7 @@ export class RuntimeEngine extends EventEmitter {
 
     async initializeCoreOperators() {
         const allOperators = this.operatorsRegistry.getAllOperators();
-        for (const [name, opDef] of Object.entries(allOperators)) {
+        for (const operator of allOperators) {
             this.operators.set(name, this.createProductionOperatorWrapper(name, opDef));
         }
 

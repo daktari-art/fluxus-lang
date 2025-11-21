@@ -82,115 +82,122 @@ export class FluxusLibraryLoader extends EventEmitter {
     async buildProductionRegistry() {
         const registry = new Map();
 
-        // Core libraries with LIB paths only
-        const coreLibraries = [
-            {
-                name: 'core',
-                paths: [
-                    './core/operators/index.js',           // CHANGED: lib/core/operators
-                    './core/index.js',
-                    './core/core.js'
-                ],
-                category: 'foundation',
-                critical: true
-            },
-            {
-                name: 'math',
-                paths: [
-                    './math/index.js',                     // CHANGED: lib/math
-                    './math/math.js'
-                ],
-                category: 'standard'
-            },
-            {
-                name: 'math_basic',
-                paths: [
-                    './math/basic/index.js',               // NEW: lib/math/basic
-                    './math/basic.js'
-                ],
-                category: 'standard'
-            },
-            {
-                name: 'math_advanced',
-                paths: [
-                    './math/index.js',                     // CHANGED: lib/math
-                    './math/math.js'
-                ],
-                category: 'standard'
-            },
-            {
-                name: 'text',
-                paths: [
-                    './text/index.js',                     // NEW: lib/text
-                    './text/string.js'
-                ],
-                category: 'standard'
-            },
-            {
-                name: 'collections',
-                paths: [
-                    './core/collections.js',
-                    './data/collections.js'
-                ],
-                category: 'foundation'
-            },
-            {
-                name: 'time',
-                paths: [
-                    './time/index.js',                     // CHANGED: lib/time
-                    './time/time.js'
-                ],
-                category: 'standard'
-            },
-            {
-                name: 'network',
-                paths: [
-                    './network/index.js',                  // CHANGED: lib/network
-                    './network/network.js'
-                ],
-                category: 'domain'
-            },
-            {
-                name: 'reactive',
-                paths: [
-                    './reactive/index.js',                 // CHANGED: lib/reactive
-                    './reactive/reactive.js'
-                ],
-                category: 'domain'
-            },
-            {
-                name: 'analytics',
-                paths: [
-                    './domains/analytics.js',              // CHANGED: lib/domains/analytics
-                    './analytics/index.js'
-                ],
-                category: 'domain'
-            },
-            {
-                name: 'health',
-                paths: [
-                    './domains/health.js',                 // CHANGED: lib/domains/health
-                    './health/index.js'
-                ],
-                category: 'domain'
-            },
-            {
-                name: 'iot',
-                paths: [
-                    './domains/iot.js',                    // CHANGED: lib/domains/iot
-                    './iot/index.js'
-                ],
-                category: 'domain'
-            },
-            {
-                name: 'security',
-                paths: [
-                    './security/index.js',                 // NEW: lib/security
-                    './security/security.js'
-                ],
-                category: 'domain'
-            }
-        ];
+// Core libraries with CORRECTED LIB paths
+const coreLibraries = [
+    {
+        name: 'core',
+        paths: [
+            './index.js',                    // ✅ EXISTS: src/lib/index.js
+            './domains/health.js',           // ✅ Core domain files
+            './domains/iot.js',
+            './domains/ui.js',
+            './domains/analytics.js',
+            './domains/sensors.js'
+        ],
+        category: 'foundation',
+        critical: true
+    },
+    {
+        name: 'math',
+        paths: [
+            './math/math.js',                // ✅ EXISTS: src/lib/math/math.js
+            './math/stats.js',               // ✅ EXISTS: src/lib/math/stats.js
+            './math/stats/index.js',         // ✅ EXISTS: src/lib/math/stats/index.js
+            './math/trig/index.js'           // ✅ EXISTS: src/lib/math/trig/index.js
+        ],
+        category: 'standard'
+    },
+    {
+        name: 'math_basic',
+        paths: [
+            './math/math.js',                // ✅ EXISTS: Same as math
+            './math/stats.js'
+        ],
+        category: 'standard'
+    },
+    {
+        name: 'math_advanced',
+        paths: [
+            './math/math.js',                // ✅ EXISTS: Same as math
+            './math/stats.js',
+            './math/stats/index.js'
+        ],
+        category: 'standard'
+    },
+    {
+        name: 'text',
+        paths: [
+            './text/string.js',              // ✅ EXISTS: src/lib/text/string.js
+            './text/regex/index.js',         // ✅ EXISTS: src/lib/text/regex/index.js
+            './text/format/index.js'         // ✅ EXISTS: src/lib/text/format/index.js
+        ],
+        category: 'standard'
+    },
+    {
+        name: 'collections',
+        paths: [
+            './data/streams.js',             // ✅ EXISTS: src/lib/data/streams.js
+            './data/aggregators.js',         // ✅ EXISTS: src/lib/data/aggregators.js
+            './data/transducers.js'          // ✅ EXISTS: src/lib/data/transducers.js
+        ],
+        category: 'foundation'
+    },
+    {
+        name: 'time',
+        paths: [
+            './time/time.js',                // ✅ EXISTS: src/lib/time/time.js
+            './time/date/index.js',          // ✅ EXISTS: src/lib/time/date/index.js
+            './time/scheduler/index.js'      // ✅ EXISTS: src/lib/time/scheduler/index.js
+        ],
+        category: 'standard'
+    },
+    {
+        name: 'network',
+        paths: [
+            './network/http.js',             // ✅ EXISTS: src/lib/network/http.js
+            './network/mqtt.js',             // ✅ EXISTS: src/lib/network/mqtt.js
+            './network/websocket.js'         // ✅ EXISTS: src/lib/network/websocket.js
+        ],
+        category: 'domain'
+    },
+    {
+        name: 'reactive',
+        paths: [
+            './reactive/pools.js',           // ✅ EXISTS: src/lib/reactive/pools.js
+            './reactive/lenses.js',          // ✅ EXISTS: src/lib/reactive/lenses.js
+            './reactive/subscriptions.js'    // ✅ EXISTS: src/lib/reactive/subscriptions.js
+        ],
+        category: 'domain'
+    },
+    {
+        name: 'analytics',
+        paths: [
+            './domains/analytics.js'         // ✅ EXISTS: src/lib/domains/analytics.js
+        ],
+        category: 'domain'
+    },
+    {
+        name: 'health',
+        paths: [
+            './domains/health.js'            // ✅ EXISTS: src/lib/domains/health.js
+        ],
+        category: 'domain'
+    },
+    {
+        name: 'iot',
+        paths: [
+            './domains/iot.js'               // ✅ EXISTS: src/lib/domains/iot.js
+        ],
+        category: 'domain'
+    },
+    {
+        name: 'security',
+        paths: [
+            './security-manager.js'          // ✅ EXISTS: src/lib/security-manager.js
+        ],
+        category: 'domain'
+    }
+];
 
         // Discover and register libraries
         for (const lib of coreLibraries) {

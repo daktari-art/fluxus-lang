@@ -1,7 +1,7 @@
 // FILENAME: src/lib/math/stats/index.js
 // Fluxus Math Statistics Library Index
 
-export { STATS_OPERATORS } from '../stats.js';
+import { STATS_OPERATORS } from '../stats.js';
 
 // Additional specialized statistical operators can be added here
 export const STATS_INDEX = {

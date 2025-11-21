@@ -1,6 +1,7 @@
 // FILENAME: src/lib/network/http.js
 // HTTP Client Operations
 
+// DEFINE HTTP_OPERATORS FIRST
 export const HTTP_OPERATORS = {
     'http_get': async (input, args) => {
         const url = args[0] || input;
@@ -17,7 +18,7 @@ export const HTTP_OPERATORS = {
             return { error: error.message, status: 500 };
         }
     },
-    
+
     'http_post': async (input, args) => {
         const url = args[0];
         const body = args[1] || input;
@@ -33,13 +34,13 @@ export const HTTP_OPERATORS = {
             return { error: error.message, status: 500 };
         }
     },
-    
+
     'http_status_check': (input, args) => {
         const expectedStatus = parseInt(args[0]) || 200;
         const isSuccess = input.status === expectedStatus;
         return { ...input, isSuccess, statusMatch: isSuccess };
     },
-    
+
     'parse_json': (input, args) => {
         try {
             if (typeof input.body === 'string') {
@@ -50,4 +51,12 @@ export const HTTP_OPERATORS = {
             return { ...input, error: 'Invalid JSON', original: input.body };
         }
     }
+};
+
+// THEN USE IT IN HTTPClient
+export const HTTPClient = {
+    get: HTTP_OPERATORS.http_get,
+    post: HTTP_OPERATORS.http_post,
+    statusCheck: HTTP_OPERATORS.http_status_check,
+    parseJSON: HTTP_OPERATORS.parse_json
 };
