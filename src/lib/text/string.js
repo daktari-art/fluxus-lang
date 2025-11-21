@@ -388,6 +388,28 @@ export const STRING_LENS_UTILITIES = {
     replace: (str, search, replacement) => String(str).replaceAll(search, replacement)
 };
 
+// ==================== INDIVIDUAL EXPORTS FOR BACKWARD COMPATIBILITY ====================
+
+// Export individual string operators as named exports
+export const trim = FLUXUS_STRING_OPERATORS.trim.implementation;
+export const to_upper = FLUXUS_STRING_OPERATORS.to_upper.implementation;
+export const to_lower = FLUXUS_STRING_OPERATORS.to_lower.implementation;
+export const concat = FLUXUS_STRING_OPERATORS.concat.implementation;
+export const split = FLUXUS_STRING_OPERATORS.split.implementation;
+export const match = FLUXUS_STRING_OPERATORS.match.implementation;
+export const test = FLUXUS_STRING_OPERATORS.test.implementation;
+export const length = FLUXUS_STRING_OPERATORS.length.implementation;
+export const contains = FLUXUS_STRING_OPERATORS.contains.implementation;
+export const starts_with = FLUXUS_STRING_OPERATORS.starts_with.implementation;
+export const ends_with = FLUXUS_STRING_OPERATORS.ends_with.implementation;
+export const substring = FLUXUS_STRING_OPERATORS.substring.implementation;
+export const replace = FLUXUS_STRING_OPERATORS.replace.implementation;
+export const repeat = FLUXUS_STRING_OPERATORS.repeat.implementation;
+export const encode_base64 = FLUXUS_STRING_OPERATORS.encode_base64.implementation;
+export const decode_base64 = FLUXUS_STRING_OPERATORS.decode_base64.implementation;
+export const escape_html = FLUXUS_STRING_OPERATORS.escape_html.implementation;
+export const sanitize = FLUXUS_STRING_OPERATORS.sanitize.implementation;
+
 export const StringOperators = FLUXUS_STRING_OPERATORS;
 
 export default FLUXUS_STRING_OPERATORS;

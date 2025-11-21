@@ -3,9 +3,8 @@
 
 import { FluxusPackageManager } from '../package-manager.js';
 import { FluxusLibraryLoader } from '../lib/hybrid-loader.js';
-import { OperatorsRegistry } from '../lib/index.js'; // CHANGED: lib instead of stdlib
+import { OperatorsRegistry } from '../lib/index.js';
 import { EventEmitter } from 'events';
-//import { setUIAdapter as _setUIAdapter } from '../lib/core/operators/ui/ui_events.js'; // CHANGED
 import { UI_OPERATORS } from '../lib/domains/ui.js';
 import { performance } from 'perf_hooks';
 
@@ -73,7 +72,7 @@ export class RuntimeEngine extends EventEmitter {
             securityOperations: 0,
             uiOperations: 0,
             executionPhases: {},
-            librarySelections: { stdlib: 0, lib: 0, hybrid: 0 }
+            librarySelections: { lib: 0, hybrid: 0, core: 0 }
         };
 
         this.performance = {
@@ -438,9 +437,6 @@ export class RuntimeEngine extends EventEmitter {
                 if (domainSource) return domainSource;
             }
 
-            const stdlibSource = availableSources.find(src => src.type === 'stdlib');
-            if (stdlibSource) return stdlibSource;
-
             return availableSources[0];
         };
 
@@ -487,39 +483,36 @@ export class RuntimeEngine extends EventEmitter {
     buildComprehensiveLibraries() {
         const libraries = new Map();
 
-        // ========== ALL LIBRARIES NOW USE 'lib' TYPE ==========
-        
-        // CORE OPERATORS - NOW IN LIB
+        // CORE OPERATORS - IN LIB/INDEX.JS
         libraries.set('core', {
             path: 'lib/index.js',
             type: 'lib',
             complexity: 'simple',
             domain: 'core',
-            operators: ['map', 'filter', 'reduce', 'print', 'to_pool', 'identity', 'tap'],
+            operators: ['print', 'map', 'filter', 'reduce', 'to_pool', 'identity', 'tap'],
             description: 'Core stream processing operators'
         });
 
-        // BASIC MATH - NOW IN LIB
+        // MATH OPERATORS - IN LIB/MATH/
         libraries.set('math_basic', {
             path: 'lib/math/math.js',
             type: 'lib',
             complexity: 'simple',
             domain: 'math',
-            operators: ['add', 'subtract', 'multiply', 'divide'],
+            operators: ['add', 'subtract', 'multiply', 'divide', 'sin', 'cos', 'tan'],
             description: 'Basic arithmetic operations'
         });
 
-        // ADVANCED MATH - ALREADY IN LIB
         libraries.set('math_advanced', {
             path: 'lib/math/math.js',
             type: 'lib',
             complexity: 'medium',
             domain: 'math',
-            operators: ['sin', 'cos', 'tan', 'log', 'exp', 'sqrt', 'pow', 'random', 'max', 'min', 'mean', 'sum', 'median', 'floor', 'ceil', 'round', 'abs'],
+            operators: ['log', 'exp', 'sqrt', 'pow', 'random', 'max', 'min', 'mean', 'sum', 'median', 'floor', 'ceil', 'round', 'abs'],
             description: 'Advanced mathematical operations'
         });
 
-        // TEXT OPERATIONS - NOW IN LIB
+        // TEXT OPERATIONS - IN LIB/TEXT/
         libraries.set('text', {
             path: 'lib/text/string.js',
             type: 'lib',
@@ -529,7 +522,7 @@ export class RuntimeEngine extends EventEmitter {
             description: 'Text processing operations'
         });
 
-        // DOMAIN LIBRARIES - ALREADY IN LIB
+        // DOMAIN LIBRARIES
         libraries.set('analytics', {
             path: 'lib/domains/analytics.js',
             type: 'lib',
@@ -731,7 +724,7 @@ export class RuntimeEngine extends EventEmitter {
         }
     }
 
-    // ========== LIBRARY SELECTION AND EXECUTION ==========
+    // ========== OPERATOR EXECUTION ==========
 
     async executeFunctionOperator(node, inputData) {
         const operatorName = this.cleanOperatorName(node.name);
@@ -749,12 +742,17 @@ export class RuntimeEngine extends EventEmitter {
         };
 
         try {
+            // HARDENED: Check core operators first
+            if (this.operators.has(operatorName)) {
+                const operatorWrapper = this.operators.get(operatorName);
+                return await operatorWrapper(inputData, args, executionContext);
+            }
+
+            // Then use library selection for domain operators
             const preferredLibrary = await this.selectOptimalLibrary(operatorName, executionContext);
             
             let result;
-            if (preferredLibrary === 'stdlib') {
-                result = await this.executeStdLibOperator(operatorName, inputData, args, executionContext);
-            } else if (preferredLibrary === 'lib') {
+            if (preferredLibrary === 'lib') {
                 result = await this.executeLibOperator(operatorName, inputData, args, executionContext);
             } else {
                 result = await this.executeHybridOperator(operatorName, inputData, args, executionContext);
@@ -770,6 +768,11 @@ export class RuntimeEngine extends EventEmitter {
 
     async selectOptimalLibrary(operatorName, context = {}) {
         if (!this.config.enableSmartLibrarySelection) return 'auto';
+
+        // Skip library selection if operator is already in core (shouldn't happen due to above check)
+        if (this.operators.has(operatorName)) {
+            return 'core';
+        }
 
         const complexityScore = this.analyzeComplexity(context);
         const availableSources = this.findOperatorSources(operatorName);
@@ -877,7 +880,7 @@ export class RuntimeEngine extends EventEmitter {
     async initializeCoreOperators() {
         const allOperators = this.operatorsRegistry.getAllOperators();
         for (const operator of allOperators) {
-            this.operators.set(name, this.createProductionOperatorWrapper(name, opDef));
+            this.operators.set(operator.name, this.createProductionOperatorWrapper(operator.name, operator));
         }
 
         const domains = this.operatorsRegistry.getDomains();
@@ -969,29 +972,21 @@ export class RuntimeEngine extends EventEmitter {
         }
     }
 
-    async executeStdLibOperator(operatorName, inputData, args, context) {
-        const operatorWrapper = this.operators.get(operatorName);
-        if (!operatorWrapper) {
-            throw new Error(`Standard library operator not found: ${operatorName}`);
-        }
-        return await operatorWrapper(inputData, args, context);
-    }
-
     async executeHybridOperator(operatorName, inputData, args, context) {
         const implementations = [];
         
-        try {
-            const stdlibResult = await this.executeStdLibOperator(operatorName, inputData, args, context);
-            implementations.push({ type: 'stdlib', result: stdlibResult, success: true });
-        } catch (error) {
-            implementations.push({ type: 'stdlib', error: error.message, success: false });
-        }
-
         try {
             const libResult = await this.executeLibOperator(operatorName, inputData, args, context);
             implementations.push({ type: 'lib', result: libResult, success: true });
         } catch (error) {
             implementations.push({ type: 'lib', error: error.message, success: false });
+        }
+
+        try {
+            const customResult = await this.executeCustomOperator(operatorName, inputData, args, context);
+            implementations.push({ type: 'custom', result: customResult, success: true });
+        } catch (error) {
+            implementations.push({ type: 'custom', error: error.message, success: false });
         }
 
         const successfulImpls = implementations.filter(impl => impl.success);
@@ -1010,7 +1005,6 @@ export class RuntimeEngine extends EventEmitter {
 
     async executeWithFallbacks(operatorName, inputData, args, context, originalError) {
         const fallbacks = [
-            () => this.executeStdLibOperator(operatorName, inputData, args, context),
             () => this.executeLibOperator(operatorName, inputData, args, context),
             () => this.executeCustomOperator(operatorName, inputData, args, context)
         ];
@@ -1061,6 +1055,11 @@ export class RuntimeEngine extends EventEmitter {
                 const sorted = [...input].sort((a, b) => a - b);
                 const mid = Math.floor(sorted.length / 2);
                 return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            },
+            'print': (input, args, context) => {
+                const message = args.length > 0 ? args[0] : input;
+                console.log('📝', message);
+                return message;
             }
         };
 
@@ -1205,13 +1204,15 @@ export class RuntimeEngine extends EventEmitter {
 
     findOperatorSources(operatorName) {
         const sources = [];
-        const stdlibOperators = this.operatorsRegistry.getAllOperators();
-        if (stdlibOperators[operatorName]) {
-            sources.push({ type: 'stdlib', path: 'stdlib/core/operators', operator: stdlibOperators[operatorName] });
-        }
         for (const [libName, libInfo] of this.availableLibraries) {
             if (libInfo.operators.includes(operatorName)) {
-                sources.push({ type: libInfo.type, path: libInfo.path, library: libName, complexity: libInfo.complexity });
+                sources.push({ 
+                    type: libInfo.type, 
+                    path: libInfo.path, 
+                    library: libName, 
+                    complexity: libInfo.complexity,
+                    domain: libInfo.domain 
+                });
             }
         }
         return sources;
@@ -1269,7 +1270,7 @@ export class RuntimeEngine extends EventEmitter {
             securityOperations: 0,
             uiOperations: 0,
             executionPhases: {},
-            librarySelections: { stdlib: 0, lib: 0, hybrid: 0 }
+            librarySelections: { lib: 0, hybrid: 0, core: 0 }
         };
 
         this.executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1766,7 +1767,6 @@ export class RuntimeEngine extends EventEmitter {
     }
 
     setUIAdapter(adapter) {
-        _setUIAdapter(adapter);
         this.emit('ui:adapter:set', { adapter: adapter?.constructor?.name });
     }
 
